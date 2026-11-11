@@ -144,7 +144,7 @@ const ThemePreviewCard = React.memo<{
             { backgroundColor: preset.colors.accent },
           ]}
         >
-          <Text style={[styles.selectedBadgeText, { color: preset.colors.white }]}>
+          <Text style={[styles.selectedBadgeText, { color: preset.colors.accentButtonText }]}>
             ✓
           </Text>
         </View>
@@ -392,7 +392,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           style={[styles.nextBtn, { backgroundColor: colors.accent }]}
           onPress={handleNext}
         >
-          <Text style={[styles.nextBtnText, { color: colors.white }]}>
+          <Text style={[styles.nextBtnText, { color: colors.accentButtonText }]}>
             {t("onboarding.next")}
           </Text>
         </TouchableOpacity>
@@ -432,7 +432,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           style={[styles.nextBtn, { backgroundColor: colors.accent }]}
           onPress={handleNext}
         >
-          <Text style={[styles.nextBtnText, { color: colors.white }]}>
+          <Text style={[styles.nextBtnText, { color: colors.accentButtonText }]}>
             {t("onboarding.next")}
           </Text>
         </TouchableOpacity>
@@ -515,7 +515,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           style={[styles.nextBtn, { backgroundColor: colors.accent }]}
           onPress={handleNext}
         >
-          <Text style={[styles.nextBtnText, { color: colors.white }]}>
+          <Text style={[styles.nextBtnText, { color: colors.accentButtonText }]}>
             {t("onboarding.next")}
           </Text>
         </TouchableOpacity>
@@ -633,7 +633,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
             style={[styles.nextBtn, { backgroundColor: colors.accent }]}
             onPress={handleNext}
           >
-            <Text style={[styles.nextBtnText, { color: colors.white }]}>
+            <Text style={[styles.nextBtnText, { color: colors.accentButtonText }]}>
               {selected ? t("onboarding.next") : t("onboarding.template.startEmptyNext")}
             </Text>
           </TouchableOpacity>

@@ -242,7 +242,7 @@ const SpreadsheetSchemaModal: React.FC<SpreadsheetSchemaModalProps> = ({
                   <Text style={styles.sectionTitle}>{sheet.title}</Text>
                   {sheet.csvOnly && (
                     <View style={[styles.tag, { backgroundColor: colors.accent }]}>
-                      <Text style={styles.tagText}>{t("modals.data.schema.csvTag")}</Text>
+                      <Text style={[styles.tagText, { color: colors.accentButtonText }]}>{t("modals.data.schema.csvTag")}</Text>
                     </View>
                   )}
                   {sheet.xlsxOnly && (
@@ -438,7 +438,7 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) =>
       marginTop: 12,
     },
     closeText: {
-      color: "#fff",
+      color: colors.accentButtonText,
       fontWeight: "700",
       fontSize: 15,
     },

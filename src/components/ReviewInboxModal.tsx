@@ -1828,7 +1828,7 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textDim,
     },
     groupToggleTextActive: {
-      color: colors.white,
+      color: colors.accentButtonText,
     },
     groupCategorizer: {
       borderWidth: 1,
@@ -1846,7 +1846,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     groupApproveText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },

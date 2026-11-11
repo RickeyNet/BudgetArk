@@ -2514,7 +2514,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontWeight: "600",
     },
     modalSaveText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: scale(14),
       fontWeight: "700",
     },
@@ -2552,7 +2552,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       marginTop: 1,
     },
     efToggleCheck: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: scale(13),
       fontWeight: "700",
     },

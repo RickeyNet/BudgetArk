@@ -319,7 +319,7 @@ const makeStyles = (colors: ThemeColors) =>
     primaryButtonText: {
       fontSize: 15,
       fontWeight: "800",
-      color: "#fff",
+      color: colors.accentButtonText,
     },
   });
 

@@ -363,7 +363,7 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) =>
       color: colors.textDim,
     },
     chipTextSelected: {
-      color: colors.white,
+      color: colors.accentButtonText,
     },
     privacyText: {
       fontSize: 12,

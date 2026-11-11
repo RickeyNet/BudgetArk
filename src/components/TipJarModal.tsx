@@ -295,7 +295,7 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
                         disabled={logState === "saving"}
                       >
                         {logState === "saving" ? (
-                          <ActivityIndicator color={colors.white} />
+                          <ActivityIndicator color={colors.accentButtonText} />
                         ) : (
                           <Text style={styles.logButtonText}>
                             {t("modals.engage.tipJar.thanks.logButton")}
@@ -487,7 +487,7 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) =>
       alignItems: "center",
     },
     logButtonText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },

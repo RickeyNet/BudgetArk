@@ -1845,7 +1845,7 @@ const DebtTrackerScreen: React.FC = () => {
                               }
                             }}
                           >
-                            <Text style={[styles.msSavingsLogBtnText, { color: colors.white }]}>{t("debts.screen.milestones.set")}</Text>
+                            <Text style={[styles.msSavingsLogBtnText, { color: colors.accentButtonText }]}>{t("debts.screen.milestones.set")}</Text>
                           </TouchableOpacity>
                         </View>
                         <View style={styles.msTargetQuickRow}>

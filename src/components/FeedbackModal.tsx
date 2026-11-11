@@ -362,7 +362,7 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) =>
       opacity: 0.4,
     },
     sendButtonText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },

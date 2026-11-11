@@ -2085,7 +2085,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       justifyContent: "center",
     },
     inboxBadgeText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 10,
       fontWeight: "700",
     },
@@ -2505,7 +2505,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       alignItems: "center",
     },
     limitSaveText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 14,
       fontWeight: "700",
     },

@@ -413,7 +413,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       fontWeight: "600",
     },
     filterChipTextActive: {
-      color: colors.white,
+      color: colors.accentButtonText,
     },
     gridContent: {
       paddingHorizontal: tokens.pad,
@@ -515,7 +515,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       backgroundColor: colors.accent,
     },
     detailButtonText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontWeight: "700",
       fontSize: 14,
     },

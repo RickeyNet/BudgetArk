@@ -525,7 +525,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
     },
     toggleCheck: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 13,
       fontWeight: "700",
     },

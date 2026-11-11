@@ -617,7 +617,7 @@ const AppContent: React.FC = () => {
             >
               {pendingUpdate?.appVersion ? (
                 <View style={[styles.updateVersionBadge, { backgroundColor: colors.accent }]}>
-                  <Text style={[styles.updateVersionText, { color: colors.white }]}>
+                  <Text style={[styles.updateVersionText, { color: colors.accentButtonText }]}>
                     v{pendingUpdate.appVersion}
                   </Text>
                 </View>
@@ -664,7 +664,7 @@ const AppContent: React.FC = () => {
                 style={[styles.dialogButton, { backgroundColor: colors.accent }]}
                 onPress={handleInstallUpdate}
               >
-                <Text style={[styles.dialogButtonText, { color: colors.white }]}>{t("modals.engage.updateReady.installNow")}</Text>
+                <Text style={[styles.dialogButtonText, { color: colors.accentButtonText }]}>{t("modals.engage.updateReady.installNow")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -709,7 +709,7 @@ const AppContent: React.FC = () => {
               style={[styles.dialogButton, { backgroundColor: colors.accent }]}
               onPress={handleOpenReleaseHistory}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.white }]}>{t("modals.engage.whatsNew.seeWhatsNew")}</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.accentButtonText }]}>{t("modals.engage.whatsNew.seeWhatsNew")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: "transparent" }]}

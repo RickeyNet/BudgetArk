@@ -335,7 +335,7 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
         })}
         checkColors={(preset) => ({
           background: preset.colors.accent,
-          text: preset.colors.white,
+          text: preset.colors.accentButtonText,
         })}
         renderOption={(preset) => (
           <>

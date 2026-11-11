@@ -124,7 +124,7 @@ const PinPad: React.FC<PinPadProps> = ({
                     <Text
                       style={[
                         styles.keyText,
-                        { color: canSubmit ? colors.white : colors.textDim },
+                        { color: canSubmit ? colors.accentButtonText : colors.textDim },
                       ]}
                     >
                       ✓

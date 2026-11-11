@@ -95,7 +95,7 @@ function OptionPickerModal<T>({
               const selected = isSelected(option);
               const check = checkColors?.(option) ?? {
                 background: colors.accent,
-                text: colors.white,
+                text: colors.accentButtonText,
               };
               return (
                 <TouchableOpacity

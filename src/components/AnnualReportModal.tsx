@@ -596,7 +596,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       marginTop: 4,
     },
     shareBtnText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: scale(15),
       fontWeight: "700",
     },

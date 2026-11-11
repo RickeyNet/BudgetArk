@@ -463,7 +463,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       backgroundColor: colors.card,
     },
     checkboxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-    checkboxMark: { color: colors.white, fontSize: 14, fontWeight: "700" },
+    checkboxMark: { color: colors.accentButtonText, fontSize: 14, fontWeight: "700" },
     signText: { flex: 1, fontSize: 13, color: colors.textDim, lineHeight: 18 },
     previewCard: {
       borderWidth: 1,
@@ -513,7 +513,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       alignItems: "center",
     },
     importBtnDisabled: { opacity: 0.4 },
-    importText: { fontSize: 15, fontWeight: "700", color: colors.white },
+    importText: { fontSize: 15, fontWeight: "700", color: colors.accentButtonText },
     pickerOverlay: {
       flex: 1,
       backgroundColor: colors.overlay,

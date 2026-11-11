@@ -68,7 +68,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ user, onUserUpdated }) => {
         <View style={styles.profileRow}>
           {/* Avatar circle */}
           <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
-            <Text style={[styles.avatarText, { color: colors.white }]}>
+            <Text style={[styles.avatarText, { color: colors.accentButtonText }]}>
               {user.displayName[0].toUpperCase()}
             </Text>
           </View>

@@ -151,7 +151,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     primaryBtnText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },

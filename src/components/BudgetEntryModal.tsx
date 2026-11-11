@@ -1927,7 +1927,7 @@ const makeStyles = (colors: ThemeColors) =>
       marginTop: 2,
     },
     recurringCheck: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 14,
       fontWeight: "700",
       lineHeight: 18,

@@ -491,7 +491,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     exportButtonDisabled: { opacity: 0.4 },
     exportText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },

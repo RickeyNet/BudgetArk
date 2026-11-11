@@ -73,7 +73,7 @@ const BackupReminderBanner: React.FC<BackupReminderBannerProps> = ({
           <Text
             style={[
               styles.backupBannerPrimaryText,
-              { color: colors.white },
+              { color: colors.accentButtonText },
             ]}
           >
             {t("profile.main.backupBanner.backUpNow")}
