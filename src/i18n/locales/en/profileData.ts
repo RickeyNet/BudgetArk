@@ -215,8 +215,10 @@ export const profileData = {
     dialog: {
       title: "Reset All Data",
       message:
-        "This will permanently delete all your debts, payments, and account data. This cannot be undone.",
+        "This permanently deletes everything in BudgetArk on this device: your debts, payments, budget and account data, your receipt photos, and every automatic backup stored on this device. This cannot be undone. To keep a copy, export an encrypted backup first.",
       confirm: "Reset Everything",
+      /** Closes the dialog and opens the encrypted-backup export instead. */
+      exportFirst: "Export a Backup First",
     },
   },
 } as const;

@@ -226,8 +226,10 @@ export const profileData: Localized<typeof en> = {
     dialog: {
       title: "Alle Daten zurücksetzen",
       message:
-        "Dadurch werden alle deine Schulden, Zahlungen und Kontodaten dauerhaft gelöscht. Das lässt sich nicht rückgängig machen.",
+        "Dadurch wird alles in BudgetArk auf diesem Gerät dauerhaft gelöscht: deine Schulden, Zahlungen, Budget- und Kontodaten, deine Belegfotos und alle automatischen Sicherungen, die auf diesem Gerät gespeichert sind. Das lässt sich nicht rückgängig machen. Wenn du eine Kopie behalten möchtest, exportiere zuerst eine verschlüsselte Sicherung.",
       confirm: "Alles zurücksetzen",
+      /** Closes the dialog and opens the encrypted-backup export instead. */
+      exportFirst: "Zuerst Sicherung exportieren",
     },
   },
 };

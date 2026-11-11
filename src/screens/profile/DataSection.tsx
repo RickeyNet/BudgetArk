@@ -1381,6 +1381,22 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                 {t("profile.data.reset.dialog.message")}
               </Text>
               <View style={styles.dialogActions}>
+                {/* The reset also erases the on-device automatic backups, so
+                    the only way to keep a copy is a manual export - offer it
+                    here. Closes this dialog first and presents the export
+                    modal after the dismiss (the iOS silent-present rule). */}
+                <TouchableOpacity
+                  style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setShowResetModal(false);
+                    presentAfterDismiss(handleExportData);
+                  }}
+                >
+                  <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
+                    {t("profile.data.reset.dialog.exportFirst")}
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
                   onPress={() => setShowResetModal(false)}

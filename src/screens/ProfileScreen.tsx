@@ -523,8 +523,10 @@ const ProfileScreen: React.FC = () => {
 
   /**
    * Resets all app data after user confirmation (DataSection's confirm
-   * modal calls this). Clears debts, payments, and user account, creates a
-   * fresh anonymous account, and drops back into first-launch onboarding.
+   * modal calls this). Clears all stored data, receipt photos, and the
+   * on-device automatic backups (the dialog copy names each of these - keep
+   * it in step when adding another wipe here), creates a fresh anonymous
+   * account, and drops back into first-launch onboarding.
    */
   const confirmReset = useCallback(async () => {
     triggerHaptic("warning");
