@@ -226,7 +226,7 @@ export const profileData: Localized<typeof en> = {
     dialog: {
       title: "Nollställ all data",
       message:
-        "Detta raderar permanent allt i BudgetArk på den här enheten: dina skulder, betalningar, budget- och kontouppgifter, dina kvittofoton och alla automatiska säkerhetskopior som sparats på den här enheten. Det går inte att ångra. Exportera en krypterad säkerhetskopia först om du vill behålla en kopia.",
+        "Detta raderar permanent allt i BudgetArk på den här enheten: dina skulder, betalningar, budget- och kontouppgifter, dina kvittofoton och alla automatiska säkerhetskopior som sparats på den här enheten. Det går inte att ångra. Exportera en krypterad säkerhetskopia först om du vill behålla en kopia. Kvittofoton ingår inte i säkerhetskopior och kan inte återställas.",
       confirm: "Nollställ allt",
       /** Closes the dialog and opens the encrypted-backup export instead. */
       exportFirst: "Exportera säkerhetskopia först",

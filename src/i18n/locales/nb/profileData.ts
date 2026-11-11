@@ -226,7 +226,7 @@ export const profileData: Localized<typeof en> = {
     dialog: {
       title: "Nullstill alle data",
       message:
-        "Dette sletter permanent alt i BudgetArk på denne enheten: all gjeld, alle betalinger, budsjett- og kontodata, kvitteringsbildene dine og alle automatiske sikkerhetskopier som er lagret på denne enheten. Dette kan ikke angres. Eksporter en kryptert sikkerhetskopi først hvis du vil beholde en kopi.",
+        "Dette sletter permanent alt i BudgetArk på denne enheten: all gjeld, alle betalinger, budsjett- og kontodata, kvitteringsbildene dine og alle automatiske sikkerhetskopier som er lagret på denne enheten. Dette kan ikke angres. Eksporter en kryptert sikkerhetskopi først hvis du vil beholde en kopi. Kvitteringsbilder er ikke med i sikkerhetskopier og kan ikke gjenopprettes.",
       confirm: "Nullstill alt",
       /** Closes the dialog and opens the encrypted-backup export instead. */
       exportFirst: "Eksporter sikkerhetskopi først",

@@ -215,7 +215,7 @@ export const profileData = {
     dialog: {
       title: "Reset All Data",
       message:
-        "This permanently deletes everything in BudgetArk on this device: your debts, payments, budget and account data, your receipt photos, and every automatic backup stored on this device. This cannot be undone. To keep a copy, export an encrypted backup first.",
+        "This permanently deletes everything in BudgetArk on this device: your debts, payments, budget and account data, your receipt photos, and every automatic backup stored on this device. This cannot be undone. To keep a copy, export an encrypted backup first. Receipt photos are not included in backups and can't be recovered.",
       confirm: "Reset Everything",
       /** Closes the dialog and opens the encrypted-backup export instead. */
       exportFirst: "Export a Backup First",
