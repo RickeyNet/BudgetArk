@@ -546,7 +546,7 @@ const AppContent: React.FC = () => {
           accessibilityRole="button"
           accessibilityLabel={t("common.startupError.retry")}
         >
-          <Text style={[styles.startupErrorButtonText, { color: colors.bg }]}>
+          <Text style={[styles.startupErrorButtonText, { color: colors.accentButtonText }]}>
             {t("common.startupError.retry")}
           </Text>
         </TouchableOpacity>

@@ -638,7 +638,7 @@ const ProfileScreen: React.FC = () => {
               accessibilityRole="button"
               accessibilityLabel={t("profile.main.loading.tryAgainA11y")}
             >
-              <Text style={{ color: colors.bg, fontSize: 15, fontWeight: "600" }}>
+              <Text style={{ color: colors.accentButtonText, fontSize: 15, fontWeight: "600" }}>
                 {t("profile.main.loading.tryAgain")}
               </Text>
             </TouchableOpacity>
