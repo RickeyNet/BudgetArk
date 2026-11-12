@@ -951,7 +951,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         ]}
         onPress={() => handleComplete(false)}
       >
-        <Text style={[styles.completeBtnText, { color: colors.bg }]}>
+        <Text style={[styles.completeBtnText, { color: colors.successButtonText }]}>
           {t("onboarding.name.skipForNow")}
         </Text>
       </TouchableOpacity>

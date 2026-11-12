@@ -95,7 +95,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ user, onUserUpdated }) => {
                   style={[styles.saveBtn, { backgroundColor: colors.success }]}
                   onPress={handleSaveName}
                 >
-                  <Text style={[styles.saveBtnText, { color: colors.bg }]}>
+                  <Text style={[styles.saveBtnText, { color: colors.successButtonText }]}>
                     {t("common.save")}
                   </Text>
                 </TouchableOpacity>

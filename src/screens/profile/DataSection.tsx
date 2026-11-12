@@ -1567,7 +1567,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.dialogBtn, { backgroundColor: colors.success }]}
                   onPress={() => confirmFileImport("merge")}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.successButtonText }]}>
                     {t("profile.data.import.mode.merge")}
                   </Text>
                 </TouchableOpacity>
@@ -1697,7 +1697,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.dialogBtn, { backgroundColor: colors.success }]}
                   onPress={() => confirmSpreadsheetImport("merge")}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.successButtonText }]}>
                     {t("profile.data.import.mode.merge")}
                   </Text>
                 </TouchableOpacity>
@@ -1796,7 +1796,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.pasteBtn, { backgroundColor: colors.success }]}
                   onPress={() => handlePasteImport("merge")}
                 >
-                  <Text style={[styles.pasteBtnText, { color: colors.bg }]}>
+                  <Text style={[styles.pasteBtnText, { color: colors.successButtonText }]}>
                     {t("profile.data.import.mode.merge")}
                   </Text>
                 </TouchableOpacity>

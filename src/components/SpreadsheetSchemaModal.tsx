@@ -360,7 +360,7 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) =>
     tagText: {
       fontSize: 10,
       fontWeight: "700",
-      color: "#fff",
+      color: colors.successButtonText,
       letterSpacing: 0.5,
     },
     subtle: {

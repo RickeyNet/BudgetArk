@@ -72,6 +72,10 @@ describe.each(THEME_PRESETS.map((preset) => [preset.id, preset.colors] as const)
       expect(ratio(colors.dangerButtonText, colors.danger)).toBeGreaterThanOrEqual(AA_TEXT);
     });
 
+    it("successButtonText reaches AA on the success fill", () => {
+      expect(ratio(colors.successButtonText, colors.success)).toBeGreaterThanOrEqual(AA_TEXT);
+    });
+
     it("warningButtonText reaches AA on the warning fill", () => {
       expect(ratio(colors.warningButtonText, colors.warning)).toBeGreaterThanOrEqual(AA_TEXT);
     });

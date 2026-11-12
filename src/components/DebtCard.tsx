@@ -545,7 +545,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
             accessibilityRole="button"
             accessibilityLabel={t("debts.card.card.confirmPaymentA11y")}
           >
-            <Text style={[styles.confirmPayText, { color: colors.bg }]}>
+            <Text style={[styles.confirmPayText, { color: colors.successButtonText }]}>
               ✓
             </Text>
           </TouchableOpacity>
