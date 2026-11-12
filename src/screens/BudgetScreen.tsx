@@ -1277,7 +1277,7 @@ const BudgetScreen: React.FC = () => {
 
   const listHeader = (
     <View>
-      <View style={styles.titleSection}>
+      <View style={[styles.titleSection, loadError && styles.titleSectionBelowBanner]}>
         <Text style={styles.appLabel}>BudgetArk</Text>
         <Text style={styles.screenTitle}>{t("budget.screen.header.title")}</Text>
         <Text style={styles.screenSubtitle}>{t("budget.screen.header.subtitle")}</Text>
@@ -2034,6 +2034,11 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     listContent: {
       paddingHorizontal: tokens.pad,
     },
+    // With the LoadErrorBanner above the list, the banner has already cleared
+    // the status bar, so the fixed top padding would stack on it as a blank
+    // band. A negative margin (not a smaller paddingTop) pulls the whole
+    // section up, so the absolutely positioned header icons move with it.
+    titleSectionBelowBanner: { marginTop: -(50 - tokens.gap) },
     titleSection: {
       paddingTop: 50,
       paddingBottom: tokens.gapSm + 2,

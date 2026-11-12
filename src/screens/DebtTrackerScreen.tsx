@@ -1361,7 +1361,7 @@ const DebtTrackerScreen: React.FC = () => {
   /** Summary + section header rendered above the debt list */
   const listHeader = (
     <View>
-      <View style={styles.titleSection}>
+      <View style={[styles.titleSection, loadError && styles.titleSectionBelowBanner]}>
         <Text style={styles.appLabel}>BudgetArk</Text>
         <Text style={styles.screenTitle}>{t("debts.screen.header.title")}</Text>
         <Text style={styles.screenSubtitle}>{t("debts.screen.header.subtitle")}</Text>
@@ -2128,6 +2128,11 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     keyboardAvoider: { flex: 1 },
     listContent: { paddingHorizontal: tokens.pad },
 
+    // With the LoadErrorBanner above the list, the banner has already cleared
+    // the status bar, so the fixed top padding would stack on it as a blank
+    // band. A negative margin (not a smaller paddingTop) pulls the whole
+    // section up, so the absolutely positioned header icons move with it.
+    titleSectionBelowBanner: { marginTop: -(56 - tokens.gap) },
     titleSection: { paddingTop: 56, paddingBottom: tokens.gap, alignItems: "center" as const, position: "relative" as const },
     searchIconBtn: {
       position: "absolute" as const,
