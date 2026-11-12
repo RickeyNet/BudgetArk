@@ -60,7 +60,9 @@ describe.each(THEME_PRESETS.map((preset) => [preset.id, preset.colors] as const)
     });
 
     // Status colors double as text on cards (amounts, badges, links). Rose's
-    // pastels sat near 2:1 and Slate's danger at 2.3:1 before this was pinned.
+    // pastels sat near 2:1, Slate's danger at 2.3:1 and Classic's stock Win98
+    // goldenrod warning at 1.8:1 on its silver cards (a user-reported "dark
+    // yellow I can't read") before this was pinned.
     it.each(["accent", "success", "warning", "danger", "teal"] as const)(
       "%s reaches AA as text on cards",
       (token) => {
@@ -91,19 +93,3 @@ describe.each(THEME_PRESETS.map((preset) => [preset.id, preset.colors] as const)
     });
   }
 );
-
-/**
- * Classic's status colors double as text on its silver cards. The stock
- * Win98 goldenrod warning sat at 1.8:1 there (a user-reported "dark yellow
- * I can't read"), so the preset's status colors are pinned to AA on card.
- * Other presets are not held to this yet - several still fall short.
- */
-describe("classic status colors", () => {
-  const classic = THEME_PRESETS.find((preset) => preset.id === "classic");
-  if (!classic) throw new Error("classic preset missing");
-  const { colors } = classic;
-
-  it("white text stays readable on a warning fill", () => {
-    expect(ratio(colors.white, colors.warning)).toBeGreaterThanOrEqual(AA_TEXT);
-  });
-});
