@@ -54,6 +54,7 @@ import {
 } from "../types";
 import {
   getDebts,
+  addDebt,
   getPayments,
   saveDebts,
   deleteDebt,
@@ -754,15 +755,21 @@ const DebtTrackerScreen: React.FC = () => {
       createdAt: now,
       updatedAt: now,
     };
-    const updated = [...debts, newDebt];
+    // Deliberately the storage-level append, not saveDebts([...debts, new]):
+    // after a failed load this screen's list is empty (see loadError), and
+    // saveDebts treats its input as the whole live collection - it would
+    // drop every stored debt that is missing from it.
+    const updated = await addDebt(newDebt);
     setDebts(updated);
-    await saveDebts(updated);
     await applyBankLink(newDebt.id, bankLink);
     void rescheduleCardKeepAliveReminders();
     await syncNetWorthSnapshot();
     setShowModal(false);
     void notifyAchievementCheck();
-  }, [applyBankLink, debts, notifyAchievementCheck]);
+    // The read works again, so pull in what the failed load never set
+    // (payments, milestones, ...) and let the loader clear the banner.
+    if (loadError) setReloadTick((tick) => tick + 1);
+  }, [applyBankLink, loadError, notifyAchievementCheck]);
 
   const advanceDuePrompt = useCallback(
     (
