@@ -59,3 +59,26 @@ describe.each(THEME_PRESETS.map((preset) => [preset.id, preset.colors] as const)
     });
   }
 );
+
+/**
+ * Classic's status colors double as text on its silver cards. The stock
+ * Win98 goldenrod warning sat at 1.8:1 there (a user-reported "dark yellow
+ * I can't read"), so the preset's status colors are pinned to AA on card.
+ * Other presets are not held to this yet - several still fall short.
+ */
+describe("classic status colors", () => {
+  const classic = THEME_PRESETS.find((preset) => preset.id === "classic");
+  if (!classic) throw new Error("classic preset missing");
+  const { colors } = classic;
+
+  it.each(["warning", "success", "danger", "teal", "accent"] as const)(
+    "%s reaches AA as text on cards",
+    (token) => {
+      expect(ratio(colors[token], colors.card)).toBeGreaterThanOrEqual(AA_TEXT);
+    }
+  );
+
+  it("white text stays readable on a warning fill", () => {
+    expect(ratio(colors.white, colors.warning)).toBeGreaterThanOrEqual(AA_TEXT);
+  });
+});

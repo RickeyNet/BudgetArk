@@ -242,7 +242,7 @@ export const dataSpotlights: Localized<typeof en> = {
   "theme-fleet": {
     title: "Sju nye temaer til arken din",
     blurb:
-      "Deep Sea, Slate, Classic, Lighthouse, Chart Room, Harbor Dawn og Ledger har sluttet seg til flåten - fra dyphavsblått med selvlysende glød til et høykontrasttema kontrollert for lesbarhet, et sjøkart, en ferskenfarget soloppgang og klassisk grønt regnskapspapir. Prøv alle under Utseende.",
+      "Deep Sea, Slate, 1998, Lighthouse, Chart Room, Harbor Dawn og Ledger har sluttet seg til flåten - fra dyphavsblått med selvlysende glød til et høykontrasttema kontrollert for lesbarhet, et sjøkart, en ferskenfarget soloppgang og klassisk grønt regnskapspapir. Prøv alle under Utseende.",
     cta: "Bla gjennom temaer",
     guide: {
       where: "Profil-fanen → Utseende → Tema",

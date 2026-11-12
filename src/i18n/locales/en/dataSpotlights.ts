@@ -220,7 +220,7 @@ export const dataSpotlights = {
   },
   "theme-fleet": {
     title: "Seven new themes for your Ark",
-    blurb: "Deep Sea, Slate, Classic, Lighthouse, Chart Room, Harbor Dawn and Ledger have joined the fleet - from abyssal blues with a bioluminescent glow to a high-contrast theme audited for readability, a nautical chart, a peach sunrise and classic green accounting paper. Try them all under Appearance.",
+    blurb: "Deep Sea, Slate, 1998, Lighthouse, Chart Room, Harbor Dawn and Ledger have joined the fleet - from abyssal blues with a bioluminescent glow to a high-contrast theme audited for readability, a nautical chart, a peach sunrise and classic green accounting paper. Try them all under Appearance.",
     cta: "Browse themes",
     guide: {
       where: "Profile tab → Appearance → Theme",

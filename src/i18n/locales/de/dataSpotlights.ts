@@ -243,7 +243,7 @@ export const dataSpotlights: Localized<typeof en> = {
   "theme-fleet": {
     title: "Sieben neue Designs für deine Arche",
     blurb:
-      "Deep Sea, Slate, Classic, Lighthouse, Chart Room, Harbor Dawn und Ledger sind zur Flotte gestoßen - von Tiefseeblau mit biolumineszentem Schimmer über ein Hochkontrast-Design mit geprüfter Lesbarkeit, eine Seekarte und einen pfirsichfarbenen Sonnenaufgang bis zum klassischen grünen Buchhaltungspapier. Alle unter Darstellung ausprobieren.",
+      "Deep Sea, Slate, 1998, Lighthouse, Chart Room, Harbor Dawn und Ledger sind zur Flotte gestoßen - von Tiefseeblau mit biolumineszentem Schimmer über ein Hochkontrast-Design mit geprüfter Lesbarkeit, eine Seekarte und einen pfirsichfarbenen Sonnenaufgang bis zum klassischen grünen Buchhaltungspapier. Alle unter Darstellung ausprobieren.",
     cta: "Designs ansehen",
     guide: {
       where: "Profil-Tab → Darstellung → Farbschema",

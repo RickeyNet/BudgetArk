@@ -298,36 +298,44 @@ const SLATE: ThemePreset = {
 };
 
 /**
- * Classic - the Windows 98 desktop, verbatim: teal desktop background,
+ * 1998 (shown as "1998"; formerly "Classic") - the Windows 98 desktop, verbatim: teal desktop background,
  * silver window-chrome cards, navy title-bar accent (white text on it,
  * like a title bar), maroon danger, square corners via squareCorners.
  * Fonts and beveled borders are outside what a ThemePreset can express.
  *
  * The dim/muted greys run darker than other themes on purpose: they have
  * to stay legible on BOTH the teal desktop bg and the silver cards, and
- * on #008080 even pure black only reaches ~4.7:1 - mid greys vanish.
+ * on #008080 even pure black only reaches ~4.4:1 - mid greys vanish.
+ *
+ * The status colors are darker than the stock Win98 palette for the same
+ * reason: warning / success / teal are used as TEXT on the silver cards,
+ * where dark goldenrod (#b8860b) measured 1.8:1 and green (#008000) 2.8:1.
+ * They are deliberately tuned to AA (4.5:1) on card; themeContrast.test.ts
+ * pins that. Don't brighten them back toward the "authentic" values.
  */
 const CLASSIC: ThemePreset = {
+  // The id deliberately stays "classic": it is the persisted / synced theme
+  // selection, so renaming it would reset everyone who picked this theme.
   id: "classic",
-  name: "Classic",
+  name: "1998",
   squareCorners: true,
   colors: {
     bg: "#008080",
     card: "#c0c0c0",
     cardBorder: "#808080",
     accent: "#000080",
-    success: "#008000",
-    successDim: "rgba(0, 128, 0, 0.15)",
-    warning: "#b8860b",
-    warningDim: "rgba(184, 134, 11, 0.15)",
+    success: "#005000",
+    successDim: "rgba(0, 80, 0, 0.15)",
+    warning: "#5c4100",
+    warningDim: "rgba(92, 65, 0, 0.15)",
     danger: "#a00000",
     dangerDim: "rgba(160, 0, 0, 0.15)",
     text: "#000000",
     textDim: "#222222",
     textMuted: "#383838",
     white: "#ffffff",
-    teal: "#006666",
-    tealDim: "rgba(0, 102, 102, 0.15)",
+    teal: "#004d4d",
+    tealDim: "rgba(0, 77, 77, 0.15)",
     accentButtonText: "#ffffff",
     overlay: "rgba(0, 0, 0, 0.75)",
     overlayStrong: "rgba(0, 0, 0, 0.85)",

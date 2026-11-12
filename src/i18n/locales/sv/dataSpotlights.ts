@@ -242,7 +242,7 @@ export const dataSpotlights: Localized<typeof en> = {
   "theme-fleet": {
     title: "Sju nya teman till din ark",
     blurb:
-      "Deep Sea, Slate, Classic, Lighthouse, Chart Room, Harbor Dawn och Ledger har anslutit till flottan - från djuphavsblått med självlysande sken till ett högkontrasttema granskat för läsbarhet, ett sjökort, en persikofärgad soluppgång och klassiskt grönt bokföringspapper. Prova alla under Utseende.",
+      "Deep Sea, Slate, 1998, Lighthouse, Chart Room, Harbor Dawn och Ledger har anslutit till flottan - från djuphavsblått med självlysande sken till ett högkontrasttema granskat för läsbarhet, ett sjökort, en persikofärgad soluppgång och klassiskt grönt bokföringspapper. Prova alla under Utseende.",
     cta: "Bläddra bland teman",
     guide: {
       where: "Fliken Profil → Utseende → Tema",
