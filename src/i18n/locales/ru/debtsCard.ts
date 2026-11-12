@@ -82,6 +82,8 @@ export const debtsCard: LocalizedPlural<typeof en> = {
     selected_few: "Выбрано {{count}}",
     selected_many: "Выбрано {{count}}",
     selected_other: "Выбрано {{count}}",
+    select: "Выбрать",
+    selectA11y: "Выбрать платежи для удаления",
     deleteSelectedA11y: "Удалить выбранные платежи",
     deleted_one: "Удалён {{count}} платёж",
     deleted_few: "Удалено {{count}} платежа",

@@ -74,6 +74,8 @@ export const debtsCard: Localized<typeof en> = {
     },
     selected_one: "{{count}} ausgewählt",
     selected_other: "{{count}} ausgewählt",
+    select: "Auswählen",
+    selectA11y: "Zahlungen zum Löschen auswählen",
     deleteSelectedA11y: "Ausgewählte Zahlungen löschen",
     deleted_one: "{{count}} Zahlung gelöscht",
     deleted_other: "{{count}} Zahlungen gelöscht",

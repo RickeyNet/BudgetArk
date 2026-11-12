@@ -1609,13 +1609,13 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
                     <View style={styles.editButtonRow}>
                       <TouchableOpacity
-                        style={styles.deleteButton}
+                        style={[styles.deleteButton, styles.editButtonThree]}
                         onPress={handleDelete}
                       >
                         <Text style={styles.deleteText}>{t("common.delete")}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={styles.cancelButton}
+                        style={[styles.cancelButton, styles.editButtonThree]}
                         onPress={handleCancel}
                       >
                         <Text style={styles.cancelText}>{t("common.cancel")}</Text>
@@ -1623,6 +1623,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                       <TouchableOpacity
                         style={[
                           styles.submitButton,
+                          styles.editButtonThree,
                           !isValid && styles.submitButtonDisabled,
                         ]}
                         onPress={handleEditSave}
@@ -1961,10 +1962,23 @@ const makeStyles = (colors: ThemeColors) =>
       borderTopColor: colors.cardBorder,
     },
     /* Edit mode: inline at the end of the scroll, with Delete. */
+    // Delete / Cancel / Save: equal thirds leave ~95dp each on a 360dp
+    // phone, too tight for "Abbrechen" / "Сохранить" at larger text sizes.
+    // Buttons size to their label, share the leftover, and wrap if needed.
     editButtonRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: 10,
       marginTop: 8,
+    },
+    editButtonThree: {
+      // flex: 0 cancels the base style's `flex: 1`, which would otherwise
+      // pin the basis to zero and bring the equal thirds back.
+      flex: 0,
+      flexGrow: 1,
+      flexShrink: 0,
+      flexBasis: "auto",
+      paddingHorizontal: 12,
     },
     deleteButton: {
       flex: 1,

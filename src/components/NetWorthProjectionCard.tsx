@@ -554,6 +554,8 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     actionRow: {
       flexDirection: "row",
+      // Save / Cancel / Remove overflow the card in long-word languages.
+      flexWrap: "wrap",
       gap: tokens.gapSm,
       marginTop: 4,
     },

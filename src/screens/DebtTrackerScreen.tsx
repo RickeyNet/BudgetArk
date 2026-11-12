@@ -1234,6 +1234,38 @@ const DebtTrackerScreen: React.FC = () => {
     sortedDebtsRef.current = sortedDebts;
   }, [sortedDebts]);
 
+  /**
+   * "Open this debt's payment input": set by the due banner when the next
+   * minimum is still upcoming (nothing to confirm yet, so the due-day prompt
+   * would be the wrong question). The nonce lets a repeat tap on the same
+   * debt re-open a card the user has since collapsed. DebtCard owns its
+   * expanded / pay-input state and reacts to the nonce; this screen only
+   * scrolls the card into view.
+   */
+  const [payRequest, setPayRequest] = useState<{ debtId: string; nonce: number } | null>(null);
+
+  const requestPayFor = useCallback((debt: Debt) => {
+    // An owner filter that hides this debt would leave nothing to scroll to.
+    setOwnerFilter((current) =>
+      current === "all" || debt.owner === current ? current : "all"
+    );
+    setPayRequest((prev) => ({ debtId: debt.id, nonce: (prev?.nonce ?? 0) + 1 }));
+  }, []);
+
+  // Declared after the sortedDebtsRef mirror above so the ref already holds
+  // this commit's order (including a filter reset from requestPayFor).
+  React.useEffect(() => {
+    if (!payRequest) return;
+    const index = sortedDebtsRef.current.findIndex((d) => d.id === payRequest.debtId);
+    if (index < 0) return;
+    // One frame so the card's expanded height lands before the scroll
+    // target is computed.
+    const frame = requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [payRequest]);
+
   const scrollPayInputIntoView = useCallback((debtId: string) => {
     const index = sortedDebtsRef.current.findIndex((d) => d.id === debtId);
     if (index < 0) return;
@@ -1313,9 +1345,10 @@ const DebtTrackerScreen: React.FC = () => {
         onKeepAliveUse={handleKeepAliveUse}
         onPayInputFocus={handlePayInputFocus}
         isFocusDebt={item.id === focusDebtId}
+        payRequestNonce={payRequest?.debtId === item.id ? payRequest.nonce : undefined}
       />
     ),
-    [handleInlinePayment, handleDelete, handleEdit, handleKeepAliveUse, handlePayInputFocus, bankLinkByDebt, focusDebtId]
+    [handleInlinePayment, handleDelete, handleEdit, handleKeepAliveUse, handlePayInputFocus, bankLinkByDebt, focusDebtId, payRequest]
   );
 
   /** Summary + section header rendered above the debt list */
@@ -1435,58 +1468,47 @@ const DebtTrackerScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {countdownNow !== null && debts.length > 0 && (
-        <View style={{ marginBottom: tokens.gap }}>
-          <DebtFreeCountdownCard
-            debts={debts}
-            payments={payments}
-            strategy={strategy}
-            now={countdownNow}
-          />
-        </View>
-      )}
+      {/* The banners render nothing when there is nothing to flag, so the
+          spacing rides on their own style - a wrapper View would leave an
+          empty gap above the list. */}
+      <DebtDueReminderBanner
+        style={{ marginBottom: tokens.gap }}
+        debts={debts}
+        payments={payments}
+        dismissals={dueDismissals}
+        onOpen={() => {
+          const due = debtsDueOrOverdueNeedingPrompt(
+            debts,
+            payments,
+            dueDismissals
+          );
+          if (due[0]) {
+            setDuePromptDebt(due[0]);
+            return;
+          }
+          // Not due yet: the banner promises a way to pay, so land on the
+          // card with its payment input open (it used to open Edit Debt).
+          const upcoming = upcomingDebtDuesWithin(
+            debts,
+            payments,
+            7,
+            dueDismissals
+          );
+          if (upcoming[0]) requestPayFor(upcoming[0].debt);
+        }}
+        daysAhead={7}
+      />
 
-      <View style={{ marginBottom: tokens.gap }}>
-        <DebtDueReminderBanner
-          debts={debts}
-          payments={payments}
-          dismissals={dueDismissals}
-          onOpen={() => {
-            const due = debtsDueOrOverdueNeedingPrompt(
-              debts,
-              payments,
-              dueDismissals
-            );
-            if (due[0]) {
-              setDuePromptDebt(due[0]);
-              return;
-            }
-            const upcoming = upcomingDebtDuesWithin(
-              debts,
-              payments,
-              7,
-              dueDismissals
-            );
-            if (upcoming[0]) {
-              setEditingDebt(upcoming[0].debt);
-              setShowModal(true);
-            }
-          }}
-          daysAhead={7}
-        />
-      </View>
-
-      <View style={{ marginBottom: tokens.gap }}>
-        <CardKeepAliveBanner
-          debts={debts}
-          dismissals={keepAliveDismissals}
-          onOpen={(debt) => {
-            setEditingDebt(debt);
-            setShowModal(true);
-          }}
-          onDismiss={handleKeepAliveDismiss}
-        />
-      </View>
+      <CardKeepAliveBanner
+        style={{ marginBottom: tokens.gap }}
+        debts={debts}
+        dismissals={keepAliveDismissals}
+        onOpen={(debt) => {
+          setEditingDebt(debt);
+          setShowModal(true);
+        }}
+        onDismiss={handleKeepAliveDismiss}
+      />
 
       {/* Section header - just title + sort hint */}
       <View style={styles.sectionHeader}>
@@ -1497,6 +1519,23 @@ const DebtTrackerScreen: React.FC = () => {
       </View>
     </View>
   );
+
+  /**
+   * The debt-free countdown sits BELOW the list: it is a projection to read
+   * after the debts themselves, and above them it pushed the first debt off
+   * the first screen on small phones.
+   */
+  const listFooter =
+    countdownNow !== null && debts.length > 0 ? (
+      <View style={{ marginTop: tokens.gap }}>
+        <DebtFreeCountdownCard
+          debts={debts}
+          payments={payments}
+          strategy={strategy}
+          now={countdownNow}
+        />
+      </View>
+    ) : null;
 
   /** Empty state when user has no debts */
   const emptyState = (
@@ -1542,6 +1581,7 @@ const DebtTrackerScreen: React.FC = () => {
           renderItem={renderDebtCard}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={emptyState}
+          ListFooterComponent={listFooter}
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
@@ -2569,15 +2609,20 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     fontSize: 15,
     fontWeight: "700" as const,
   },
+  // Up to three actions share this row. Content-sized + wrap rather than
+  // equal thirds: "Als erledigt markieren" / "Отметить завершённым" do not
+  // fit a third of a 360dp sheet, so a long label takes its own line.
   msStepActionRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
   },
   msStepActionBtn: {
-    flex: 1,
+    flexGrow: 1,
     borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 10,
+    paddingHorizontal: 12,
     alignItems: "center",
   },
   msStepActionText: {

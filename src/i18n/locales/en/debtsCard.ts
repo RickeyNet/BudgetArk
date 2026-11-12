@@ -72,6 +72,8 @@ export const debtsCard = {
     },
     selected_one: "{{count}} selected",
     selected_other: "{{count}} selected",
+    select: "Select",
+    selectA11y: "Select payments to delete",
     deleteSelectedA11y: "Delete selected payments",
     deleted_one: "Deleted {{count}} payment",
     deleted_other: "Deleted {{count}} payments",

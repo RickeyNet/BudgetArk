@@ -523,15 +523,15 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         <Text style={styles.missionFootnote}>{t("onboarding.mission.footnote")}</Text>
       </ScrollView>
 
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.skipBtn} onPress={handleBack}>
+      <View style={[styles.buttonRow, styles.buttonRowThree]}>
+        <TouchableOpacity style={[styles.skipBtn, styles.btnThree]} onPress={handleBack}>
           <Text style={styles.skipBtnText}>{t("onboarding.back")}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
+        <TouchableOpacity style={[styles.skipBtn, styles.btnThree]} onPress={handleSkip}>
           <Text style={styles.skipBtnText}>{t("onboarding.skip")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.nextBtn, { backgroundColor: colors.accent }]}
+          style={[styles.nextBtn, styles.btnThree, { backgroundColor: colors.accent }]}
           onPress={handleNext}
         >
           <Text style={[styles.nextBtnText, { color: colors.accentButtonText }]}>
@@ -646,15 +646,15 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         </View>
       </ScrollView>
 
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.skipBtn} onPress={handleBack}>
+      <View style={[styles.buttonRow, styles.buttonRowThree]}>
+        <TouchableOpacity style={[styles.skipBtn, styles.btnThree]} onPress={handleBack}>
           <Text style={styles.skipBtnText}>{t("onboarding.back")}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
+        <TouchableOpacity style={[styles.skipBtn, styles.btnThree]} onPress={handleSkip}>
           <Text style={styles.skipBtnText}>{t("onboarding.skip")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.nextBtn, { backgroundColor: colors.accent }]}
+          style={[styles.nextBtn, styles.btnThree, { backgroundColor: colors.accent }]}
           onPress={handleNext}
         >
           <Text style={[styles.nextBtnText, { color: colors.accentButtonText }]}>
@@ -1293,6 +1293,21 @@ const makeStyles = (colors: ThemePreset["colors"], tokens: DensityTokens) => {
       gap: 12,
       width: "100%",
       marginTop: "auto",
+    },
+    // Back / Skip / Next: equal thirds clip "Überspringen" / "Пропустить"
+    // on a 360dp phone, so three-up rows size each button to its label,
+    // share the leftover, and wrap as a last resort.
+    buttonRowThree: {
+      flexWrap: "wrap",
+    },
+    btnThree: {
+      // flex: 0 cancels the base style's `flex: 1`, which would otherwise
+      // pin the basis to zero and bring the equal thirds back.
+      flex: 0,
+      flexGrow: 1,
+      flexShrink: 0,
+      flexBasis: "auto",
+      paddingHorizontal: 12,
     },
     skipBtn: {
       flex: 1,

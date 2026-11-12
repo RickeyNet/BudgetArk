@@ -623,12 +623,16 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       lineHeight: 17 * tokens.fontScale,
       marginBottom: 10,
     },
+    // Merge / Replace / Cancel: content-sized + wrap rather than equal
+    // thirds, which clip the German and Russian labels on a 360dp phone.
     restoreButtons: {
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: tokens.gap,
     },
     restoreButton: {
-      flex: 1,
+      flexGrow: 1,
+      paddingHorizontal: 12,
       borderRadius: tokens.radiusSm,
       paddingVertical: 10,
       alignItems: "center",

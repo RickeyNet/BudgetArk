@@ -83,10 +83,17 @@ interface DebtCardProps {
 
   /** Whether this is the priority debt to pay off first (expanded by default) */
   isFocusDebt?: boolean;
+
+  /**
+   * Set (and bumped on every repeat request) when the screen wants this
+   * card open on its payment input - the due banner's tap target. Undefined
+   * for every other card.
+   */
+  payRequestNonce?: number;
 }
 
 /* ─── Component ─── */
-const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, onKeepAliveUse, onPayInputFocus, bankLink = null, isFocusDebt = false }) => {
+const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, onKeepAliveUse, onPayInputFocus, bankLink = null, isFocusDebt = false, payRequestNonce }) => {
   /** Get current theme colors */
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -97,8 +104,11 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   /** Local state for collapsed/expanded and payment input */
-  const [expanded, setExpanded] = useState(isFocusDebt);
-  const [showPayInput, setShowPayInput] = useState(false);
+  // A card that mounts with a pay request pending (it was virtualized out
+  // when the banner was tapped) starts open - useValueChanged below only
+  // sees changes after mount.
+  const [expanded, setExpanded] = useState(isFocusDebt || payRequestNonce !== undefined);
+  const [showPayInput, setShowPayInput] = useState(payRequestNonce !== undefined);
   const [payAmount, setPayAmount] = useState("");
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState(false);
@@ -110,6 +120,11 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
   // re-render.
   if (useValueChanged(isFocusDebt)) {
     setExpanded(isFocusDebt);
+  }
+  // After the focus sync so a pay request wins when both change at once.
+  if (useValueChanged(payRequestNonce) && payRequestNonce !== undefined) {
+    setExpanded(true);
+    setShowPayInput(true);
   }
 
   /** Derived calculations */
@@ -763,19 +778,26 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     /* Footer */
+    // Wraps: a long timeline line ("~24 Monate bis zur Tilgung") plus three
+    // buttons does not fit a 360dp card in German or Russian. The buttons
+    // drop to their own line, still right-aligned, instead of clipping.
     footerRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
       justifyContent: "space-between",
       alignItems: "center",
+      gap: 8,
       marginTop: 12,
     },
     timelineText: {
+      flexShrink: 1,
       fontSize: 12,
       color: colors.textDim,
     },
     actionButtons: {
       flexDirection: "row",
       gap: 8,
+      marginLeft: "auto",
     },
     payButton: {
       borderRadius: 8,

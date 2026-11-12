@@ -454,13 +454,18 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       lineHeight: scale(19),
       color: colors.textDim,
     },
+    // Skip all / Back / Next: fixed 1:1:2 shares clip "Alle überspringen" /
+    // "Пропустить все" on a 360dp phone. Buttons size to their label, share
+    // the leftover in the same 1:1:2 ratio, and wrap as a last resort.
     buttonRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: tokens.gapSm,
       marginTop: tokens.gapSm,
     },
     skipBtn: {
-      flex: 1,
+      flexGrow: 1,
+      paddingHorizontal: 12,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderRadius: tokens.radiusSm,
@@ -474,7 +479,8 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.textDim,
     },
     backBtn: {
-      flex: 1,
+      flexGrow: 1,
+      paddingHorizontal: 12,
       borderWidth: 1,
       borderColor: `${colors.accent}40`,
       borderRadius: tokens.radiusSm,
@@ -488,7 +494,8 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.accent,
     },
     nextBtn: {
-      flex: 2,
+      flexGrow: 2,
+      paddingHorizontal: 12,
       borderRadius: tokens.radiusSm,
       paddingVertical: 12,
       alignItems: "center",

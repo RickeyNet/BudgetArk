@@ -339,14 +339,29 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
-            <View>
-              <Text style={styles.title}>{t("debts.card.history.title")}</Text>
+            <View style={styles.headerText}>
+              <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                {t("debts.card.history.title")}
+              </Text>
               {sections.length > 0 && (
                 <Text style={styles.totalLabel}>
                   {t("debts.card.history.totalPaid", { amount: formatCurrency(totalAll) })}
                 </Text>
               )}
             </View>
+            {/* Long-press still enters selection, but it is invisible - this
+                button is the discoverable way to delete a payment. */}
+            {!selectionMode && sections.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSelectionMode(true)}
+                style={styles.selectBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                accessibilityRole="button"
+                accessibilityLabel={t("debts.card.history.selectA11y")}
+              >
+                <Text style={styles.selectBtnText}>{t("debts.card.history.select")}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={selectionMode ? exitSelection : onClose}
               style={styles.closeBtn}
@@ -432,11 +447,26 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
+      gap: 8,
       paddingHorizontal: 20,
       paddingTop: 20,
       paddingBottom: 14,
       borderBottomWidth: 1,
       borderBottomColor: colors.cardBorder,
+    },
+    // Takes the leftover width and shrinks, so the two header buttons keep
+    // their full labels in long-word languages on narrow phones.
+    headerText: {
+      flex: 1,
+    },
+    selectBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+    },
+    selectBtnText: {
+      color: colors.accent,
+      fontSize: 14,
+      fontWeight: "600",
     },
     title: {
       fontSize: 20,
