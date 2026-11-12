@@ -59,6 +59,15 @@ describe.each(THEME_PRESETS.map((preset) => [preset.id, preset.colors] as const)
       expect(ratio(colors.accentButtonText, colors.accent)).toBeGreaterThanOrEqual(AA_TEXT);
     });
 
+    // Status colors double as text on cards (amounts, badges, links). Rose's
+    // pastels sat near 2:1 and Slate's danger at 2.3:1 before this was pinned.
+    it.each(["accent", "success", "warning", "danger", "teal"] as const)(
+      "%s reaches AA as text on cards",
+      (token) => {
+        expect(ratio(colors[token], colors.card)).toBeGreaterThanOrEqual(AA_TEXT);
+      }
+    );
+
     it("dangerButtonText reaches AA on the danger fill", () => {
       expect(ratio(colors.dangerButtonText, colors.danger)).toBeGreaterThanOrEqual(AA_TEXT);
     });
@@ -89,13 +98,6 @@ describe("classic status colors", () => {
   const classic = THEME_PRESETS.find((preset) => preset.id === "classic");
   if (!classic) throw new Error("classic preset missing");
   const { colors } = classic;
-
-  it.each(["warning", "success", "danger", "teal", "accent"] as const)(
-    "%s reaches AA as text on cards",
-    (token) => {
-      expect(ratio(colors[token], colors.card)).toBeGreaterThanOrEqual(AA_TEXT);
-    }
-  );
 
   it("white text stays readable on a warning fill", () => {
     expect(ratio(colors.white, colors.warning)).toBeGreaterThanOrEqual(AA_TEXT);
