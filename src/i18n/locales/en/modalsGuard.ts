@@ -70,6 +70,9 @@ export const modalsGuard = {
     mostRecent: "Most recent",
     olderBackup: "Older backup",
     safetyCopy: "Safety copy (before an import or restore)",
+    /** Footnote under the backup list: what on-device backups do not cover. */
+    caution:
+      "These backups are encrypted like everything else and never leave your phone - but they're deleted if you uninstall the app, and they can't be read on another device. For moving phones or an off-device copy, use Export.",
     restore: "Restore",
     restoreHint:
       "Merge adds anything missing and keeps newer edits. Replace erases what's on the phone now and restores exactly this backup.",

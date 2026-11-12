@@ -19,6 +19,12 @@ export const onboarding: LocalizedPlural<typeof en> = {
     footnote:
       "Бесплатно, без рекламы, без аккаунта, и твои данные никогда не покидают телефон. Перечитать это можно в любой момент вверху вкладки «Профиль».",
   },
+  /** First step: language cards show each language's own name, so only this chrome is translated. */
+  language: {
+    title: "Выбери язык",
+    subtitle:
+      "BudgetArk использует язык телефона, если не выбрать другой здесь. Его можно поменять позже: вкладка «Профиль» → Настройки → Язык.",
+  },
   theme: {
     title: "Выбери тему",
     subtitle: "Выбери цветовую схему по вкусу. Её можно поменять позже в настройках.",

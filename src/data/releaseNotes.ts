@@ -27,6 +27,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Quick actions can be taken back. A payment typed on a debt card and a savings change in the milestones sheet now offer Undo, and the Review Inbox asks before approving or skipping a whole batch.",
       "The account editor tells you what's wrong. Saving an account with a missing name, a bad balance or an incomplete holding used to do nothing, and a holding with a field cleared could be removed without warning. Save now points at each field that needs fixing and changes nothing until they are right.",
       "A tab that can't read your data says so. If the Debts, Budget or Bridge tab fails to load, it now shows a notice with Try again instead of looking empty. Nothing is deleted when this happens.",
+      "Setup starts by asking for your language. The first step lists every language under its own name, with Automatic still following your phone, and the rest of setup switches the moment you pick one. Three leftover English bits are translated too: the screen shown when the app can't read its data at launch, the footnote under the Automatic Backups list, and the screen-reader label on the Undo bar's close button.",
     ],
   },
   {

@@ -20,6 +20,12 @@ export const onboarding: Localized<typeof en> = {
     footnote:
       "Gratis, ingen reklame, ingen konto - og dataene dine forlater aldri telefonen din. Du kan lese dette igjen når som helst øverst på Profil-fanen.",
   },
+  /** First step: language cards show each language's own name, so only this chrome is translated. */
+  language: {
+    title: "Velg språket ditt",
+    subtitle:
+      "BudgetArk følger språket på telefonen med mindre du velger et her. Du kan endre det senere under Profil-fanen → Innstillinger → Språk.",
+  },
   theme: {
     title: "Velg temaet ditt",
     subtitle: "Velg et fargeskjema som passer stilen din. Du kan endre det senere i innstillingene.",

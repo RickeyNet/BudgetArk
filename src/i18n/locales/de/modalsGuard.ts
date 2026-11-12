@@ -73,6 +73,9 @@ export const modalsGuard: Localized<typeof en> = {
     mostRecent: "Neueste",
     olderBackup: "Ältere Sicherung",
     safetyCopy: "Sicherheitskopie (vor Import oder Wiederherstellung)",
+    /** Footnote under the backup list: what on-device backups do not cover. */
+    caution:
+      "Diese Sicherungen sind wie alles andere verschlüsselt und verlassen nie dein Telefon - sie werden aber gelöscht, wenn du die App deinstallierst, und lassen sich auf keinem anderen Gerät lesen. Für einen Telefonwechsel oder eine Kopie außerhalb des Geräts nutze den Export.",
     restore: "Wiederherstellen",
     restoreHint:
       "Zusammenführen ergänzt Fehlendes und behält neuere Änderungen. Ersetzen löscht, was jetzt auf dem Telefon ist, und stellt genau diese Sicherung wieder her.",

@@ -535,21 +535,19 @@ const AppContent: React.FC = () => {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.bg }]}>
         <Text style={[styles.startupErrorTitle, { color: colors.text }]}>
-          Couldn't load your data
+          {t("common.startupError.title")}
         </Text>
         <Text style={[styles.startupErrorBody, { color: colors.textDim }]}>
-          BudgetArk couldn't read its saved data on this device. This can
-          happen when the phone is very low on free storage. Your data has
-          not been changed - freeing up space usually fixes it.
+          {t("common.startupError.body")}
         </Text>
         <TouchableOpacity
           style={[styles.startupErrorButton, { backgroundColor: colors.accent }]}
           onPress={() => setStartupAttempt((n) => n + 1)}
           accessibilityRole="button"
-          accessibilityLabel="Try again"
+          accessibilityLabel={t("common.startupError.retry")}
         >
           <Text style={[styles.startupErrorButtonText, { color: colors.bg }]}>
-            Try Again
+            {t("common.startupError.retry")}
           </Text>
         </TouchableOpacity>
       </View>

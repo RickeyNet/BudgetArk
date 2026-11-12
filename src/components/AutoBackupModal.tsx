@@ -503,10 +503,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
           )}
 
           <Text style={[styles.caution, { color: colors.textMuted }]}>
-            These backups are encrypted like everything else and never leave
-            your phone - but they're deleted if you uninstall the app, and
-            they can't be read on another device. For moving phones or an
-            off-device copy, use Export.
+            {t("modals.guard.backup.caution")}
           </Text>
         </ScrollView>
       </View>

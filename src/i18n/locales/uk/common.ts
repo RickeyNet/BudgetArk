@@ -34,6 +34,15 @@ export const common: LocalizedPlural<typeof en> = {
   unknown: "Невідомо",
   undo: "СКАСУВАТИ",
   undoLastAction: "Скасувати останню дію",
+  /** Undo toast's ✕ (UndoProvider), read out by screen readers. */
+  dismiss: "Сховати",
+  /** App.tsx - the saved user record couldn't be read at launch. */
+  startupError: {
+    title: "Не вдалося завантажити дані",
+    body:
+      "BudgetArk не зміг прочитати збережені дані на цьому пристрої. Так буває, коли на телефоні майже не лишилося вільного місця. Твої дані не змінилися - зазвичай допомагає звільнити місце.",
+    retry: "Повторити",
+  },
   /** components/LoadErrorBanner - a tab whose storage read failed. */
   loadError: {
     message:

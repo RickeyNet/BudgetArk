@@ -3,9 +3,13 @@
  * File: src/screens/OnboardingScreen.tsx
  *
  * First-launch onboarding flow that guides users through:
- * 1. Theme selection (choose color scheme)
- * 2. Welcome message and app overview
- * 3. Optional display name setup
+ * 1. Language (so every later step is read in the right one)
+ * 2. Mission statement
+ * 3. Theme selection (choose color scheme)
+ * 4. Welcome message and app overview
+ * 5. Quick-start template
+ * 6. Tracking reminders
+ * 7. Optional display name setup + guided tour choice
  *
  * Performance optimizations:
  * - Uses React.memo for theme preview cards to prevent unnecessary re-renders
@@ -32,6 +36,8 @@ import {
   Platform,
 } from "react-native";
 import { useTranslation } from "react-i18next";
+import { useLanguage } from "../i18n/LanguageProvider";
+import type { AppLanguageId } from "../i18n/pickLanguage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useAndroidKeyboardInputScroll } from "../hooks/useAndroidKeyboardInputScroll";
@@ -67,12 +73,25 @@ import {
 type OnboardingStyles = ReturnType<typeof makeStyles>;
 
 /**
- * Onboarding step enum for type safety. "mission" comes first on purpose:
- * before a single choice is asked of them, the user hears why the app
- * exists and what it promises (free, private, offline) - the same copy as
- * the Profile mission card, so the two never drift.
+ * Onboarding step enum for type safety. "language" comes first on purpose:
+ * everything after it is prose, so the user must be able to fix a wrong
+ * guess (phone in one language, reader in another) before reading any of
+ * it. "mission" follows: before any other choice is asked of them, the
+ * user hears why the app exists and what it promises (free, private,
+ * offline) - the same copy as the Profile mission card, so the two never
+ * drift.
  */
-type OnboardingStep = "mission" | "theme" | "welcome" | "template" | "reminders" | "name";
+type OnboardingStep =
+  | "language"
+  | "mission"
+  | "theme"
+  | "welcome"
+  | "template"
+  | "reminders"
+  | "name";
+
+/** Shown in the "STEP n OF m" eyebrow of every step. */
+const TOTAL_STEPS = 7;
 
 interface OnboardingScreenProps {
   /** Callback when onboarding is complete */
@@ -169,7 +188,13 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const { colors, presets, themeId, setThemeId } = useTheme();
   const { tokens } = useDensity();
   const { t } = useTranslation();
-  const [step, setStep] = useState<OnboardingStep>("mission");
+  const {
+    languageId,
+    resolvedLanguage,
+    options: languageOptions,
+    setLanguageId,
+  } = useLanguage();
+  const [step, setStep] = useState<OnboardingStep>("language");
   const [displayName, setDisplayName] = useState("");
   /** Guards the reminders step's button through the OS permission prompt. */
   const [remindersBusy, setRemindersBusy] = useState(false);
@@ -208,10 +233,28 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   );
 
   /**
+   * Handle language selection - LanguageProvider switches i18next at once,
+   * so this very step re-renders in the chosen language. The setting is
+   * cosmetic and already applied for this session when the write runs, so
+   * a failed save is not surfaced: the app stays readable now and Profile >
+   * Settings > Language sets it again.
+   */
+  const handleLanguageSelect = useCallback(
+    (id: AppLanguageId) => {
+      setLanguageId(id).catch((error: unknown) => {
+        if (__DEV__) console.warn("Failed to save language:", error);
+      });
+    },
+    [setLanguageId]
+  );
+
+  /**
    * Advance to next step
    */
   const handleNext = useCallback(() => {
-    if (step === "mission") {
+    if (step === "language") {
+      setStep("mission");
+    } else if (step === "mission") {
       setStep("theme");
     } else if (step === "theme") {
       setStep("welcome");
@@ -229,7 +272,9 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    * back button)
    */
   const handleBack = useCallback(() => {
-    if (step === "theme") {
+    if (step === "mission") {
+      setStep("language");
+    } else if (step === "theme") {
       setStep("mission");
     } else if (step === "welcome") {
       setStep("theme");
@@ -376,7 +421,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
 
   /**
    * Skip to the end (keeps current theme, default name). Skipping setup
-   * also declines the guided tour: someone who would not sit through six
+   * also declines the guided tour: someone who would not sit through seven
    * setup steps did not ask for a tab-by-tab walkthrough either. The tips
    * stay in Profile > Help > Feature guide.
    */
@@ -385,10 +430,81 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
     [finishOnboarding]
   );
 
+  /**
+   * Render the language step. Each language is listed under its OWN name
+   * (never translated), so a reader who cannot follow the language the
+   * phone picked still finds theirs; the name in the active language sits
+   * underneath as a secondary line. "Automatic" keeps following the phone
+   * and says what that currently resolves to.
+   */
+  const renderLanguageStep = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.stepNumber}>
+        {t("onboarding.stepOf", { step: 1, total: TOTAL_STEPS })}
+      </Text>
+      <Text style={styles.heroEmoji}>🌐</Text>
+      <Text style={styles.stepTitle}>{t("onboarding.language.title")}</Text>
+      <Text style={styles.stepSubtitle}>{t("onboarding.language.subtitle")}</Text>
+
+      <View style={styles.templateList} accessibilityRole="radiogroup">
+        {languageOptions.map((option) => {
+          const isSelected = languageId === option.id;
+          const translated = t(
+            `profile.settings.language.names.${option.id === "auto" ? resolvedLanguage : option.id}`
+          );
+          const title =
+            option.nativeName ??
+            t("profile.settings.language.autoWithResolved", { language: translated });
+          const secondary = option.nativeName && translated !== title ? translated : "";
+          return (
+            <TouchableOpacity
+              key={option.id}
+              style={[
+                styles.languageCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: isSelected ? colors.accent : colors.cardBorder,
+                },
+              ]}
+              onPress={() => handleLanguageSelect(option.id)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: isSelected }}
+              accessibilityLabel={secondary ? `${title}. ${secondary}` : title}
+            >
+              <View style={styles.featureContent}>
+                <Text style={styles.languageName}>{title}</Text>
+                {secondary ? (
+                  <Text style={styles.languageSecondary}>{secondary}</Text>
+                ) : null}
+              </View>
+              {isSelected ? (
+                <Text style={[styles.languageCheck, { color: colors.accent }]}>✓</Text>
+              ) : null}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
+          <Text style={styles.skipBtnText}>{t("onboarding.skipSetup")}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.nextBtn, { backgroundColor: colors.accent }]}
+          onPress={handleNext}
+        >
+          <Text style={[styles.nextBtnText, { color: colors.accentButtonText }]}>
+            {t("onboarding.next")}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   /** Render the mission step - why BudgetArk exists, before any setup. */
   const renderMissionStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 1, total: 6 })}</Text>
+      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 2, total: TOTAL_STEPS })}</Text>
       <Text style={styles.heroEmoji}>⚓</Text>
       <Text style={styles.missionEyebrow}>{MISSION_STATEMENT.eyebrow}</Text>
       <Text style={styles.stepTitle}>{MISSION_STATEMENT.title}</Text>
@@ -408,8 +524,11 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
       </ScrollView>
 
       <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.skipBtn} onPress={handleBack}>
+          <Text style={styles.skipBtnText}>{t("onboarding.back")}</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
-          <Text style={styles.skipBtnText}>{t("onboarding.skipSetup")}</Text>
+          <Text style={styles.skipBtnText}>{t("onboarding.skip")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextBtn, { backgroundColor: colors.accent }]}
@@ -426,7 +545,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render theme selection step */
   const renderThemeStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 2, total: 6 })}</Text>
+      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 3, total: TOTAL_STEPS })}</Text>
       <Text style={styles.heroEmoji}>🎨</Text>
       <Text style={styles.stepTitle}>{t("onboarding.theme.title")}</Text>
       <Text style={styles.stepSubtitle}>{t("onboarding.theme.subtitle")}</Text>
@@ -466,7 +585,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render welcome step */
   const renderWelcomeStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 3, total: 6 })}</Text>
+      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 4, total: TOTAL_STEPS })}</Text>
       <Text style={styles.heroEmoji}>💸</Text>
       <Text style={styles.stepTitle}>{t("onboarding.welcome.title")}</Text>
       <Text style={styles.stepSubtitle}>{t("onboarding.welcome.subtitle")}</Text>
@@ -555,7 +674,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
     const selected = quickStartTemplateById(templateId);
     return (
       <View style={styles.stepContainer}>
-        <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 4, total: 6 })}</Text>
+        <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 5, total: TOTAL_STEPS })}</Text>
         <Text style={styles.heroEmoji}>🗺️</Text>
         <Text style={styles.stepTitle}>{t("onboarding.template.title")}</Text>
         <Text style={styles.stepSubtitle}>{t("onboarding.template.subtitle")}</Text>
@@ -674,7 +793,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    */
   const renderRemindersStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 5, total: 6 })}</Text>
+      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 6, total: TOTAL_STEPS })}</Text>
       <Text style={styles.heroEmoji}>🔔</Text>
       <Text style={styles.stepTitle}>{t("onboarding.reminders.title")}</Text>
       <Text style={styles.stepSubtitle}>{t("onboarding.reminders.subtitle")}</Text>
@@ -739,7 +858,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render display name step */
   const renderNameStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 6, total: 6 })}</Text>
+      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 7, total: TOTAL_STEPS })}</Text>
       <Text style={styles.heroEmoji}>⚓</Text>
       <Text style={styles.stepTitle}>{t("onboarding.name.title")}</Text>
       <Text style={styles.stepSubtitle}>{t("onboarding.name.subtitle")}</Text>
@@ -858,6 +977,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           onScroll={onKeyboardInputScroll}
           scrollEventThrottle={16}
         >
+          {step === "language" && renderLanguageStep()}
           {step === "mission" && renderMissionStep()}
           {step === "theme" && renderThemeStep()}
           {step === "welcome" && renderWelcomeStep()}
@@ -950,6 +1070,32 @@ const makeStyles = (colors: ThemePreset["colors"], tokens: DensityTokens) => {
       color: colors.textDim,
       textAlign: "center",
       paddingHorizontal: tokens.pad,
+    },
+
+    /* Language step */
+    languageCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      minHeight: 56,
+      borderWidth: 2,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.pad,
+      paddingVertical: 10,
+    },
+    languageName: {
+      fontSize: scale(17),
+      fontWeight: "600",
+      color: colors.text,
+    },
+    languageSecondary: {
+      fontSize: scale(13),
+      color: colors.textDim,
+      marginTop: 2,
+    },
+    languageCheck: {
+      fontSize: scale(18),
+      fontWeight: "700",
     },
 
     /* Theme selection */

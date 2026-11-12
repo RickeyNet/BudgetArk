@@ -73,6 +73,9 @@ export const modalsGuard: Localized<typeof en> = {
     mostRecent: "Senaste",
     olderBackup: "Äldre säkerhetskopia",
     safetyCopy: "Säkerhetskopia (före import eller återställning)",
+    /** Footnote under the backup list: what on-device backups do not cover. */
+    caution:
+      "Säkerhetskopiorna är krypterade som allt annat och lämnar aldrig din telefon - men de raderas om du avinstallerar appen, och de kan inte läsas på en annan enhet. Använd Exportera när du byter telefon eller vill ha en kopia utanför enheten.",
     restore: "Återställ",
     restoreHint:
       "Slå ihop lägger till det som saknas och behåller nyare ändringar. Ersätt raderar det som finns på telefonen nu och återställer exakt den här säkerhetskopian.",

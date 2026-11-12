@@ -210,7 +210,7 @@ export const UndoProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
               onPress={dismiss}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityRole="button"
-              accessibilityLabel="Dismiss"
+              accessibilityLabel={t("common.dismiss")}
             >
               <Text style={[styles.close, { color: colors.textMuted }]}>
                 ✕

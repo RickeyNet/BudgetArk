@@ -2,7 +2,7 @@
  * BudgetArk - English strings: Onboarding
  * File: src/i18n/locales/en/onboarding.ts
  *
- * The six-step first-launch flow (OnboardingScreen.tsx). The mission
+ * The seven-step first-launch flow (OnboardingScreen.tsx). The mission
  * statement and quick-start template copy come from src/data and are not
  * in this tree yet - see the Localization TODO.
  */
@@ -16,6 +16,12 @@ export const onboarding = {
   mission: {
     footnote:
       "Free, no ads, no account, and your data never leaves your phone. You can reread this anytime at the top of the Profile tab.",
+  },
+  /** First step: language cards show each language's own name, so only this chrome is translated. */
+  language: {
+    title: "Choose Your Language",
+    subtitle:
+      "BudgetArk follows your phone's language unless you pick one here. You can change it later in Profile → Settings → Language.",
   },
   theme: {
     title: "Choose Your Theme",

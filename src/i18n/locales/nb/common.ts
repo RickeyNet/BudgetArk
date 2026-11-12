@@ -35,6 +35,15 @@ export const common: Localized<typeof en> = {
   unknown: "Ukjent",
   undo: "ANGRE",
   undoLastAction: "Angre siste handling",
+  /** Undo toast's ✕ (UndoProvider), read out by screen readers. */
+  dismiss: "Lukk",
+  /** App.tsx - the saved user record couldn't be read at launch. */
+  startupError: {
+    title: "Kunne ikke laste inn dataene dine",
+    body:
+      "BudgetArk kunne ikke lese de lagrede dataene sine på denne enheten. Dette kan skje når telefonen har veldig lite ledig lagringsplass. Dataene dine er ikke endret - å frigjøre plass løser det som regel.",
+    retry: "Prøv igjen",
+  },
   /** components/LoadErrorBanner - a tab whose storage read failed. */
   loadError: {
     message:

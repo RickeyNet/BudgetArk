@@ -35,6 +35,15 @@ export const common = {
   /** Undo toast button (UndoProvider) - shouted like the debts card. */
   undo: "UNDO",
   undoLastAction: "Undo last action",
+  /** Undo toast's ✕ (UndoProvider), read out by screen readers. */
+  dismiss: "Dismiss",
+  /** App.tsx - the saved user record couldn't be read at launch. */
+  startupError: {
+    title: "Couldn't load your data",
+    body:
+      "BudgetArk couldn't read its saved data on this device. This can happen when the phone is very low on free storage. Your data has not been changed - freeing up space usually fixes it.",
+    retry: "Try Again",
+  },
   /** components/LoadErrorBanner - a tab whose storage read failed. */
   loadError: {
     message:

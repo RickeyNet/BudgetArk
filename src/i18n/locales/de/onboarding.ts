@@ -19,6 +19,12 @@ export const onboarding: Localized<typeof en> = {
     footnote:
       "Kostenlos, ohne Werbung, ohne Konto - und deine Daten verlassen nie dein Telefon. Du kannst das jederzeit oben im Profil-Tab nachlesen.",
   },
+  /** First step: language cards show each language's own name, so only this chrome is translated. */
+  language: {
+    title: "Wähle deine Sprache",
+    subtitle:
+      "BudgetArk folgt der Sprache deines Telefons, außer du wählst hier eine aus. Du kannst sie später unter Profil-Tab → Einstellungen → Sprache ändern.",
+  },
   theme: {
     title: "Wähle dein Farbschema",
     subtitle: "Such dir ein Farbschema aus, das zu dir passt. Du kannst es später in den Einstellungen ändern.",
