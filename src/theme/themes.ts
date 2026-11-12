@@ -30,6 +30,13 @@ export type ThemeColors = Readonly<{
   white: string;
   teal: string;           
   tealDim: string;
+  /**
+   * Text and icons drawn on an `accent` fill (primary buttons, selected
+   * chips, checkmarks). Must reach WCAG AA 4.5:1 against `accent` -
+   * themeContrast.test.ts pins it for every preset. Neither black nor white
+   * is a safe default: black fails on the dark accents, white on the bright
+   * ones.
+   */
   accentButtonText: string;
   /**
    * Scrim behind centered dialogs and celebration cards - dims the screen
@@ -75,7 +82,7 @@ const ARK_PARCHMENT: ThemePreset = {
     white: "#F2E6D0",
     teal: "#5A8A7A",
     tealDim: "rgba(90, 138, 122, 0.15)",
-    accentButtonText: "#D4B896",
+    accentButtonText: "#F2E6D0",
     overlay: "rgba(0, 0, 0, 0.75)",
     overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
@@ -127,7 +134,7 @@ const NEON_PURPLE: ThemePreset = {
     white: "#ffffff",
     teal: "#00bcd4",                         
     tealDim: "rgba(0, 188, 212, 0.15)",
-    accentButtonText: "#000000",
+    accentButtonText: "#ffffff",
     overlay: "rgba(0, 0, 0, 0.75)",
     overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
@@ -369,7 +376,7 @@ const DEEP_SPACE: ThemePreset = {
     white: "#ffffff",
     teal: "#2dd4bf",
     tealDim: "rgba(45, 212, 191, 0.14)",
-    accentButtonText: "#ffffff",
+    accentButtonText: "#000000",
     overlay: "rgba(0, 0, 0, 0.75)",
     overlayStrong: "rgba(0, 0, 0, 0.85)",
   },

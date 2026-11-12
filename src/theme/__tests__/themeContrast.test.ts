@@ -4,6 +4,9 @@
  * textMuted carries roughly 200 text styles (captions, hints, placeholders).
  * It used to sit between 1.8:1 and 3.6:1 on cards in 14 themes. These tests
  * pin the floor so a new or retuned preset can't regress it.
+ *
+ * accentButtonText is pinned the same way against the accent fill: it was
+ * 2.8:1 in Deep Space, 3.9:1 in The Ark and 4.3:1 in Neon Purple.
  */
 
 import { contrastRatio } from "../colorMath";
@@ -46,6 +49,10 @@ describe.each(THEME_PRESETS.map((preset) => [preset.id, preset.colors] as const)
 
     (BG_EXEMPT.has(id) ? it.skip : it)("textMuted reaches AA on the screen background", () => {
       expect(ratio(colors.textMuted, colors.bg)).toBeGreaterThanOrEqual(AA_TEXT);
+    });
+
+    it("accentButtonText reaches AA on the accent fill", () => {
+      expect(ratio(colors.accentButtonText, colors.accent)).toBeGreaterThanOrEqual(AA_TEXT);
     });
 
     it("keeps the text > textDim > textMuted hierarchy on cards and background", () => {
