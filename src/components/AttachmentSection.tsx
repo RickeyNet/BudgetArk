@@ -339,7 +339,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
     },
     thumbRemoveText: {
-      color: colors.white,
+      color: colors.dangerButtonText,
       fontSize: 13,
       fontWeight: "700",
       lineHeight: 15,

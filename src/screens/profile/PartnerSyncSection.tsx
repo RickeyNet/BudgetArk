@@ -422,7 +422,7 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
                   })();
                 }}
               >
-                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                <Text style={[styles.dialogBtnText, { color: colors.dangerButtonText }]}>
                   {t("profile.connections.partnerSync.unpair")}
                 </Text>
               </TouchableOpacity>

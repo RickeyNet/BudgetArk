@@ -941,7 +941,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                 style={[styles.dialogBtn, { backgroundColor: colors.danger }]}
                 onPress={handleDelete}
               >
-                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                <Text style={[styles.dialogBtnText, { color: colors.dangerButtonText }]}>
                   {t("common.delete")}
                 </Text>
               </TouchableOpacity>

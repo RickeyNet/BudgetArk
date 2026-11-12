@@ -7,6 +7,10 @@
  *
  * accentButtonText is pinned the same way against the accent fill: it was
  * 2.8:1 in Deep Space, 3.9:1 in The Ark and 4.3:1 in Neon Purple.
+ *
+ * dangerButtonText / warningButtonText replace white (and, on three import
+ * buttons, bg) on solid danger and warning fills: white was 2.2:1 on
+ * Lighthouse's danger and under 2.5:1 on warning in eleven themes.
  */
 
 import { contrastRatio } from "../colorMath";
@@ -53,6 +57,14 @@ describe.each(THEME_PRESETS.map((preset) => [preset.id, preset.colors] as const)
 
     it("accentButtonText reaches AA on the accent fill", () => {
       expect(ratio(colors.accentButtonText, colors.accent)).toBeGreaterThanOrEqual(AA_TEXT);
+    });
+
+    it("dangerButtonText reaches AA on the danger fill", () => {
+      expect(ratio(colors.dangerButtonText, colors.danger)).toBeGreaterThanOrEqual(AA_TEXT);
+    });
+
+    it("warningButtonText reaches AA on the warning fill", () => {
+      expect(ratio(colors.warningButtonText, colors.warning)).toBeGreaterThanOrEqual(AA_TEXT);
     });
 
     it("keeps the text > textDim > textMuted hierarchy on cards and background", () => {

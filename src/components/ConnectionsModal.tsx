@@ -1381,7 +1381,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     dialogRemoveText: {
-      color: colors.white,
+      color: colors.dangerButtonText,
       fontSize: 14,
       fontWeight: "700",
     },

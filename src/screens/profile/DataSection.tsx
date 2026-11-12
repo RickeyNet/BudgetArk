@@ -1450,7 +1450,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                     void onConfirmReset();
                   }}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.dangerButtonText }]}>
                     {t("profile.data.reset.dialog.confirm")}
                   </Text>
                 </TouchableOpacity>
@@ -1575,7 +1575,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.dialogBtn, { backgroundColor: colors.danger }]}
                   onPress={() => confirmFileImport("replace")}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.dangerButtonText }]}>
                     {t("profile.data.import.mode.replace")}
                   </Text>
                 </TouchableOpacity>
@@ -1705,7 +1705,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.dialogBtn, { backgroundColor: colors.danger }]}
                   onPress={() => confirmSpreadsheetImport("replace")}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.dangerButtonText }]}>
                     {t("profile.data.import.mode.replace")}
                   </Text>
                 </TouchableOpacity>
@@ -1804,7 +1804,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.pasteBtn, { backgroundColor: colors.danger }]}
                   onPress={() => handlePasteImport("replace")}
                 >
-                  <Text style={[styles.pasteBtnText, { color: colors.bg }]}>
+                  <Text style={[styles.pasteBtnText, { color: colors.dangerButtonText }]}>
                     {t("profile.data.import.mode.replace")}
                   </Text>
                 </TouchableOpacity>

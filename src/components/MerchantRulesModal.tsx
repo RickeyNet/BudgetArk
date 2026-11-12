@@ -906,7 +906,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       alignItems: "center",
     },
     dialogDeleteText: {
-      color: colors.white,
+      color: colors.warningButtonText,
       fontSize: scale(13),
       fontWeight: "700",
     },

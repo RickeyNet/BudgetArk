@@ -2827,7 +2827,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     fontWeight: "700",
   },
   dialogDeleteText: {
-    color: colors.white,
+    color: colors.dangerButtonText,
     fontSize: 15,
     fontWeight: "700",
   },
