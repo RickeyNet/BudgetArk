@@ -8,11 +8,16 @@
  * and up to two recurring entries. Without an income figure there is
  * nothing to size limits from, so only the housing line (if given) is
  * seeded. Pure and unit-tested; OnboardingScreen assigns ids and persists.
+ *
+ * The two seeded descriptions are written once, in the language active at
+ * that moment (the user just picked it on the first step), and are then
+ * ordinary editable entry text - they do not follow a later language switch.
  */
 
 import type { BudgetCategory, CategoryBudgetLimit, NewBudgetEntryInput } from "../types";
 import type { QuickStartTemplate } from "../data/quickStartTemplates";
 import { buildEntryDateISO } from "./entryDate";
+import { t } from "../i18n/translate";
 
 export interface QuickStartInputs {
   /** YYYY-MM the seed lands in (the install month). */
@@ -49,7 +54,7 @@ export const buildQuickStartSeed = (
       type: "income",
       category: "Salary",
       amount: income,
-      description: "Take-home pay",
+      description: t("onboarding.template.seedIncome"),
       date: firstOfMonth,
       recurring: true,
       recurrenceInterval: 1,
@@ -60,7 +65,7 @@ export const buildQuickStartSeed = (
       type: "expense",
       category: "Housing",
       amount: housing,
-      description: "Rent / mortgage",
+      description: t("onboarding.template.seedHousing"),
       date: firstOfMonth,
       recurring: true,
       recurrenceInterval: 1,

@@ -73,6 +73,9 @@ export const onboarding: Localized<typeof en> = {
     housingPlaceholder: "z. B. 1400",
     hint: "Beides optional. Limits werden als Anteil vom Nettogehalt gesetzt; lässt du es leer, kannst du sie später im Budget-Tab unter Limits eintragen. Wird nur auf diesem Telefon gespeichert.",
     startEmptyNext: "Leer starten →",
+    /** Descriptions written onto the two recurring lines a template seeds (utils/quickStart). */
+    seedIncome: "Nettogehalt",
+    seedHousing: "Miete / Hypothek",
   },
   reminders: {
     title: "Möchtest du einen Anstupser zum Dranbleiben?",

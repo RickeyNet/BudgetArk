@@ -3,8 +3,8 @@
  * File: src/i18n/locales/en/onboarding.ts
  *
  * The seven-step first-launch flow (OnboardingScreen.tsx). The mission
- * statement and quick-start template copy come from src/data and are not
- * in this tree yet - see the Localization TODO.
+ * statement lives in dataDisclosures.ts and the quick-start template cards
+ * in dataTemplates.ts; src/data resolves both lazily in the active language.
  */
 
 export const onboarding = {
@@ -71,6 +71,9 @@ export const onboarding = {
     housingPlaceholder: "e.g. 1400",
     hint: "Both optional. Limits are set as a share of take-home pay; leave it blank and you can fill them in later from the Budget tab's Limits sheet. Stored only on this phone.",
     startEmptyNext: "Start empty →",
+    /** Descriptions written onto the two recurring lines a template seeds (utils/quickStart). */
+    seedIncome: "Take-home pay",
+    seedHousing: "Rent / mortgage",
   },
   reminders: {
     title: "Want a nudge to keep tracking?",

@@ -73,6 +73,9 @@ export const onboarding: LocalizedPlural<typeof en> = {
     housingPlaceholder: "напр. 1400",
     hint: "Обидва поля необов'язкові. Ліміти задаються як частка доходу на руки; залиш порожнім - і заповниш пізніше в аркуші «Ліміти» на вкладці «Бюджет». Зберігається лише на цьому телефоні.",
     startEmptyNext: "Почати з нуля →",
+    /** Descriptions written onto the two recurring lines a template seeds (utils/quickStart). */
+    seedIncome: "Дохід на руки",
+    seedHousing: "Оренда / іпотека",
   },
   reminders: {
     title: "Потрібен поштовх, щоб не кидати облік?",

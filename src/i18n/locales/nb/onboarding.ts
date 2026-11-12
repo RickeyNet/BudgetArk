@@ -74,6 +74,9 @@ export const onboarding: Localized<typeof en> = {
     housingPlaceholder: "f.eks. 1400",
     hint: "Begge er valgfrie. Grensene settes som en andel av nettolønnen; la det stå tomt, så kan du fylle dem inn senere under Grenser på Budsjett-fanen. Lagres bare på denne telefonen.",
     startEmptyNext: "Start tomt →",
+    /** Descriptions written onto the two recurring lines a template seeds (utils/quickStart). */
+    seedIncome: "Nettolønn",
+    seedHousing: "Husleie / boliglån",
   },
   reminders: {
     title: "Vil du ha et puff for å fortsette å logge?",
