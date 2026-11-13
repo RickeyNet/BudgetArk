@@ -208,6 +208,19 @@ const getNewlyPaidOffDebt = (
   return null;
 };
 
+/**
+ * Refresh the net-worth snapshot after a debt write that already landed.
+ * Deliberately never rejects: a failure here must not read as "the save
+ * failed" to the caller, and the next successful write rebuilds the snapshot.
+ */
+const refreshNetWorthSnapshot = async (): Promise<void> => {
+  try {
+    await syncNetWorthSnapshot();
+  } catch (error) {
+    if (__DEV__) console.error("Net worth snapshot refresh failed:", error);
+  }
+};
+
 const DebtTrackerScreen: React.FC = () => {
   const { runCheck: notifyAchievementCheck } = useAchievements();
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -747,7 +760,7 @@ const DebtTrackerScreen: React.FC = () => {
   const handleAddDebt = useCallback(async (
     input: NewDebtInput,
     bankLink?: DebtBankLinkExtras
-  ) => {
+  ): Promise<boolean> => {
     const now = new Date().toISOString();
     const newDebt: Debt = {
       ...input,
@@ -759,17 +772,31 @@ const DebtTrackerScreen: React.FC = () => {
     // after a failed load this screen's list is empty (see loadError), and
     // saveDebts treats its input as the whole live collection - it would
     // drop every stored debt that is missing from it.
-    const updated = await addDebt(newDebt);
+    let updated: Debt[];
+    try {
+      updated = await addDebt(newDebt);
+    } catch (error) {
+      // false tells the modal to stay open with the form intact for a retry.
+      triggerHaptic("error");
+      Alert.alert(
+        t("debts.screen.alerts.couldntSave"),
+        describeError(error, t("debts.screen.alerts.addFailed")),
+      );
+      return false;
+    }
+    // The debt is on disk from here on, so nothing below may report a
+    // failed save: the follow-up steps only refresh derived state.
     setDebts(updated);
     await applyBankLink(newDebt.id, bankLink);
     void rescheduleCardKeepAliveReminders();
-    await syncNetWorthSnapshot();
+    await refreshNetWorthSnapshot();
     setShowModal(false);
     void notifyAchievementCheck();
     // The read works again, so pull in what the failed load never set
     // (payments, milestones, ...) and let the loader clear the banner.
     if (loadError) setReloadTick((tick) => tick + 1);
-  }, [applyBankLink, loadError, notifyAchievementCheck]);
+    return true;
+  }, [applyBankLink, loadError, notifyAchievementCheck, t]);
 
   const advanceDuePrompt = useCallback(
     (
@@ -954,25 +981,47 @@ const DebtTrackerScreen: React.FC = () => {
     debtId: string,
     updates: Partial<Debt>,
     bankLink?: DebtBankLinkExtras
-  ) => {
+  ): Promise<boolean> => {
     // Snapshot the full prior record so undo can write every field back,
     // not just the keys this edit touched.
     const prior = debts.find((d) => d.id === debtId) ?? null;
-    const updated = await updateDebt(debtId, updates);
+    let updated: Debt[];
+    try {
+      updated = await updateDebt(debtId, updates);
+    } catch (error) {
+      // false tells the modal to stay open with the form intact for a retry.
+      triggerHaptic("error");
+      Alert.alert(
+        t("debts.screen.alerts.couldntSave"),
+        describeError(error, t("debts.screen.alerts.editFailed")),
+      );
+      return false;
+    }
+    // The edit is on disk from here on, so nothing below may report a
+    // failed save: the follow-up steps only refresh derived state.
     const paidOffDebt = getNewlyPaidOffDebt(debts, updated);
     setDebts(updated);
     await applyBankLink(debtId, bankLink);
     void rescheduleCardKeepAliveReminders();
-    await syncNetWorthSnapshot();
+    await refreshNetWorthSnapshot();
     setShowModal(false);
     setEditingDebt(null);
     if (prior) {
       pushUndo({
         message: t("debts.screen.undo.edited", { name: prior.name }),
+        // UndoProvider swallows a rejected onUndo, so the alert lives here.
         onUndo: async () => {
-          const reverted = await updateDebt(debtId, prior);
-          setDebts(reverted);
-          await syncNetWorthSnapshot();
+          try {
+            setDebts(await updateDebt(debtId, prior));
+          } catch (error) {
+            triggerHaptic("error");
+            Alert.alert(
+              t("debts.screen.alerts.couldntUndo"),
+              describeError(error, t("debts.screen.alerts.undoEditFailed")),
+            );
+            return;
+          }
+          await refreshNetWorthSnapshot();
           void notifyAchievementCheck();
         },
       });
@@ -986,6 +1035,7 @@ const DebtTrackerScreen: React.FC = () => {
       triggerHaptic("success");
     }
     void notifyAchievementCheck();
+    return true;
   }, [applyBankLink, debts, notifyAchievementCheck, presentAfterDismiss, pushUndo, t]);
 
   /** Delete a debt */
@@ -1001,17 +1051,37 @@ const DebtTrackerScreen: React.FC = () => {
     // a paired partner needs that to remove the debt locally on next sync,
     // otherwise their stale upsert would resurrect this deletion.
     const deletedName = pendingDeleteDebt.name;
-    const updated = await deleteDebt(debtId);
+    let updated: Debt[];
+    try {
+      updated = await deleteDebt(debtId);
+    } catch (error) {
+      // The confirm dialog stays open so Delete can be tried again.
+      triggerHaptic("error");
+      Alert.alert(
+        t("debts.screen.alerts.couldntDelete"),
+        describeError(error, t("debts.screen.alerts.deleteFailed")),
+      );
+      return;
+    }
     setDebts(updated);
-    await syncNetWorthSnapshot();
+    await refreshNetWorthSnapshot();
     setPendingDeleteDebt(null);
     triggerHaptic("warning");
     pushUndo({
       message: t("debts.screen.undo.deleted", { name: deletedName }),
+      // UndoProvider swallows a rejected onUndo, so the alert lives here.
       onUndo: async () => {
-        const restored = await restoreDebt(debtId);
-        setDebts(restored);
-        await syncNetWorthSnapshot();
+        try {
+          setDebts(await restoreDebt(debtId));
+        } catch (error) {
+          triggerHaptic("error");
+          Alert.alert(
+            t("debts.screen.alerts.couldntUndo"),
+            describeError(error, t("debts.screen.alerts.undoDeleteFailed")),
+          );
+          return;
+        }
+        await refreshNetWorthSnapshot();
         void notifyAchievementCheck();
       },
     });

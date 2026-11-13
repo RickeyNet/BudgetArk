@@ -134,6 +134,13 @@ export const debtsScreen: LocalizedPlural<typeof en> = {
     couldntSave: "Не вдалося зберегти",
     keepAliveUse: "Дата останнього використання картки не оновилася. Спробуй ще раз.",
     keepAliveMute: "Нагадування не вимкнулося. Спробуй ще раз.",
+    couldntDelete: "Не вдалося видалити",
+    couldntUndo: "Не вдалося скасувати",
+    addFailed: "Борг не додано. Спробуй ще раз.",
+    editFailed: "Зміни не збереглися. Спробуй ще раз.",
+    deleteFailed: "Борг не видалено. Спробуй ще раз.",
+    undoEditFailed: "Зміну не скасовано. У боргу залишилися твої останні правки.",
+    undoDeleteFailed: "Борг не відновлено. Він досі видалений.",
   },
   undo: {
     edited: "Змінено «{{name}}»",

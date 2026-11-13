@@ -129,6 +129,13 @@ export const debtsScreen = {
     couldntSave: "Couldn't save",
     keepAliveUse: "The card's last-used date wasn't updated. Please try again.",
     keepAliveMute: "The reminder wasn't muted. Please try again.",
+    couldntDelete: "Couldn't delete",
+    couldntUndo: "Couldn't undo",
+    addFailed: "The debt wasn't added. Please try again.",
+    editFailed: "Your changes weren't saved. Please try again.",
+    deleteFailed: "The debt wasn't deleted. Please try again.",
+    undoEditFailed: "The edit wasn't undone. The debt still has your latest changes.",
+    undoDeleteFailed: "The debt wasn't restored. It is still deleted.",
   },
   undo: {
     edited: "Edited \"{{name}}\"",

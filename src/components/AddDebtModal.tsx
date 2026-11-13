@@ -17,7 +17,7 @@
  * - useCallback on all handlers to maintain stable references
  */
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   Alert,
   Linking,
@@ -129,18 +129,25 @@ interface AddDebtModalProps {
   /** Callback to close the modal */
   onClose: () => void;
 
-  /** Callback when user submits a valid debt - receives the form data */
-  onAdd: (debt: NewDebtInput, keepAlive?: DebtBankLinkExtras) => void;
+  /**
+   * Callback when user submits a valid debt - receives the form data.
+   * Resolving to false means the save failed (the caller has told the
+   * user): the form keeps what was typed so Save can be tried again.
+   */
+  onAdd: (
+    debt: NewDebtInput,
+    keepAlive?: DebtBankLinkExtras
+  ) => void | Promise<boolean | void>;
 
   /** Optional existing debt to edit - when set, modal acts as an editor */
   editDebt?: Debt | null;
 
-  /** Callback when user saves edits to an existing debt */
+  /** Callback when user saves edits to an existing debt; false as in onAdd */
   onEdit?: (
     debtId: string,
     updates: Partial<Debt>,
     keepAlive?: DebtBankLinkExtras
-  ) => void;
+  ) => void | Promise<boolean | void>;
 }
 
 /**
@@ -251,6 +258,10 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   // seeds it from goalMonth on each open, so cancelling leaves the saved
   // goal untouched.
   const [showMonthPicker, setShowMonthPicker] = useState(false);
+  // A save in flight: the ref blocks a second submit in the same tick, the
+  // state disables the button.
+  const submittingRef = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   /**
    * Pre-fill / reset the form when the target debt changes. Render-time
@@ -389,9 +400,12 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   /**
    * Validates and submits the form.
    * Parses string inputs to numbers, checks all are valid,
-   * then calls onAdd/onEdit and resets the form.
+   * then calls onAdd/onEdit and resets the form once the save has landed.
    */
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
+    // The form is no longer cleared before the save settles, so a second
+    // tap would otherwise submit the same debt twice.
+    if (submittingRef.current) return;
     const balanceNum = bankBalance ?? parseMoneyInput(balance) ?? NaN;
     const rateNum = parseMoneyInput(rate) ?? NaN;
     const paymentNum = parseMoneyInput(minPayment) ?? NaN;
@@ -438,45 +452,56 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
         ? { originalBalance: bankBalance }
         : {};
 
-    if (isEditing && onEdit && editDebt) {
-      onEdit(
-        editDebt.id,
-        {
-          name: name.trim(),
-          balance: balanceNum,
-          rate: rateNum,
-          minPayment: paymentNum,
-          goalDate: parsedGoalDate,
-          owner,
-          debtClass,
-          debtClassSource: "manual",
-          paymentDueDay: paymentDueDayValue,
-          ...keepAliveFields,
-          ...bankOriginalBalance,
-        },
-        bankLinkExtras
-      );
-    } else {
-      onAdd(
-        {
-          name: name.trim(),
-          balance: balanceNum,
-          // Older peers' isDebtItem requires originalBalance >= 0.01 and the
-          // DebtTracker corrupted-record filter requires > 0, so a $0 card
-          // gets the smallest passing value instead of 0.
-          originalBalance: balanceNum > 0 ? balanceNum : 0.01,
-          rate: rateNum,
-          minPayment: paymentNum,
-          goalDate: parsedGoalDate,
-          owner,
-          debtClass,
-          debtClassSource: "manual",
-          paymentDueDay: paymentDueDayValue,
-          ...keepAliveFields,
-        },
-        bankLinkExtras
-      );
+    submittingRef.current = true;
+    setIsSaving(true);
+    let saved: boolean | void;
+    try {
+      saved = await (isEditing && onEdit && editDebt
+        ? onEdit(
+            editDebt.id,
+            {
+              name: name.trim(),
+              balance: balanceNum,
+              rate: rateNum,
+              minPayment: paymentNum,
+              goalDate: parsedGoalDate,
+              owner,
+              debtClass,
+              debtClassSource: "manual",
+              paymentDueDay: paymentDueDayValue,
+              ...keepAliveFields,
+              ...bankOriginalBalance,
+            },
+            bankLinkExtras
+          )
+        : onAdd(
+            {
+              name: name.trim(),
+              balance: balanceNum,
+              // Older peers' isDebtItem requires originalBalance >= 0.01 and the
+              // DebtTracker corrupted-record filter requires > 0, so a $0 card
+              // gets the smallest passing value instead of 0.
+              originalBalance: balanceNum > 0 ? balanceNum : 0.01,
+              rate: rateNum,
+              minPayment: paymentNum,
+              goalDate: parsedGoalDate,
+              owner,
+              debtClass,
+              debtClassSource: "manual",
+              paymentDueDay: paymentDueDayValue,
+              ...keepAliveFields,
+            },
+            bankLinkExtras
+          ));
+    } catch {
+      // A caller that throws instead of resolving false: same outcome.
+      saved = false;
+    } finally {
+      submittingRef.current = false;
+      setIsSaving(false);
     }
+    // Failed save: keep what was typed so Save can be tried again.
+    if (saved === false) return;
 
     /* Reset form fields */
     setName("");
@@ -985,10 +1010,10 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
             <TouchableOpacity
               style={[
                 styles.addButton,
-                !isValid && styles.addButtonDisabled,
+                (!isValid || isSaving) && styles.addButtonDisabled,
               ]}
               onPress={handleSubmit}
-              disabled={!isValid}
+              disabled={!isValid || isSaving}
             >
               <Text style={styles.addButtonText}>
                 {isEditing ? t("debts.form.buttons.saveChanges") : t("debts.form.buttons.addDebt")}

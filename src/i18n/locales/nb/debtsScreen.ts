@@ -131,6 +131,13 @@ export const debtsScreen: Localized<typeof en> = {
     couldntSave: "Kunne ikke lagre",
     keepAliveUse: "Kortets sist-brukt-dato ble ikke oppdatert. Prøv igjen.",
     keepAliveMute: "Påminnelsen ble ikke dempet. Prøv igjen.",
+    couldntDelete: "Kunne ikke slette",
+    couldntUndo: "Kunne ikke angre",
+    addFailed: "Gjelden ble ikke lagt til. Prøv igjen.",
+    editFailed: "Endringene dine ble ikke lagret. Prøv igjen.",
+    deleteFailed: "Gjelden ble ikke slettet. Prøv igjen.",
+    undoEditFailed: "Endringen ble ikke angret. Gjelden har fortsatt de siste endringene dine.",
+    undoDeleteFailed: "Gjelden ble ikke gjenopprettet. Den er fortsatt slettet.",
   },
   undo: {
     edited: "Redigerte «{{name}}»",

@@ -129,6 +129,13 @@ export const debtsScreen: Localized<typeof en> = {
     couldntSave: "Konnte nicht speichern",
     keepAliveUse: "Das Datum der letzten Nutzung wurde nicht aktualisiert. Bitte versuch es erneut.",
     keepAliveMute: "Die Erinnerung wurde nicht stummgeschaltet. Bitte versuch es erneut.",
+    couldntDelete: "Konnte nicht löschen",
+    couldntUndo: "Konnte nicht rückgängig machen",
+    addFailed: "Die Schuld wurde nicht hinzugefügt. Bitte versuch es erneut.",
+    editFailed: "Deine Änderungen wurden nicht gespeichert. Bitte versuch es erneut.",
+    deleteFailed: "Die Schuld wurde nicht gelöscht. Bitte versuch es erneut.",
+    undoEditFailed: "Die Änderung wurde nicht rückgängig gemacht. Die Schuld enthält weiterhin deine letzten Änderungen.",
+    undoDeleteFailed: "Die Schuld wurde nicht wiederhergestellt. Sie ist weiterhin gelöscht.",
   },
   undo: {
     edited: "„{{name}}“ bearbeitet",
