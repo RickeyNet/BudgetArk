@@ -5,6 +5,7 @@ import {
   expectedPaychecksInMonth,
   fulfilledMonthsByBill,
   fulfillmentsForMonth,
+  incomeRowsForMonth,
   isBillCandidate,
   isFulfillingEntry,
   listUnfulfilledOccurrenceMonths,
@@ -391,6 +392,68 @@ describe("describeIncomeProjection", () => {
     expect(describeIncomeProjection(bill(), [bill()], "2026-06")).toBeNull();
     expect(describeIncomeProjection(salary({ recurring: false }), [], "2026-06")).toBeNull();
     expect(describeIncomeProjection(salary(), [salary()], "2025-12")).toBeNull();
+  });
+});
+
+describe("incomeRowsForMonth", () => {
+  const bonus = makeBudgetEntry({
+    id: "bonus",
+    type: "income",
+    category: "Other",
+    description: "Tax refund",
+    amount: 300,
+    date: "2026-06-20T12:00:00",
+  });
+
+  it("folds paychecks into the earner's own line, under the earner's name", () => {
+    const entries = [salary(), paycheck(), bonus, bill()];
+    const rows = incomeRowsForMonth(entries, "2026-06");
+    expect(rows.map((row) => row.entry.id)).toEqual(["bonus", "maria"]);
+    const maria = rows[1];
+    expect(maria.entry.description).toBe("Maria");
+    // The stored record, not the shrunk projection copy.
+    expect(maria.entry.amount).toBe(4000);
+    expect(maria.paychecks.map((p) => p.id)).toEqual(["pay-1"]);
+    expect(maria.amount).toBe(3850);
+    expect(maria.projection).toEqual({
+      expected: 2,
+      received: 1,
+      receivedTotal: 1850,
+      remainingEstimate: 2000,
+    });
+    expect(rows[0]).toEqual({ entry: bonus, paychecks: [], amount: 300, projection: null });
+  });
+
+  it("keeps the earner's line once every paycheck is in, newest deposit first", () => {
+    const second = paycheck({ id: "pay-2", amount: 1900, date: "2026-06-19T12:00:00" });
+    const rows = incomeRowsForMonth([salary(), paycheck(), second], "2026-06");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].entry.id).toBe("maria");
+    expect(rows[0].paychecks.map((p) => p.id)).toEqual(["pay-2", "pay-1"]);
+    expect(rows[0].amount).toBe(3750);
+    expect(rows[0].projection?.remainingEstimate).toBe(0);
+  });
+
+  it("always sums to the income entriesForMonth counts", () => {
+    const second = paycheck({ id: "pay-2", amount: 1900, date: "2026-06-19T12:00:00" });
+    for (const entries of [
+      [salary(), bonus],
+      [salary(), paycheck(), bonus],
+      [salary(), paycheck(), second, bonus],
+    ]) {
+      const total = incomeRowsForMonth(entries, "2026-06").reduce((sum, row) => sum + row.amount, 0);
+      expect(total).toBeCloseTo(incomeTotal(entries, "2026-06"), 2);
+    }
+  });
+
+  it("leaves a deposit on its own line when its earner is gone or off-cycle", () => {
+    const orphan = paycheck({ fulfillsRecurringId: "nobody" });
+    expect(incomeRowsForMonth([orphan], "2026-06")).toEqual([
+      { entry: orphan, paychecks: [], amount: 1850, projection: null },
+    ]);
+    // Other months don't see June's deposit at all.
+    const rows = incomeRowsForMonth([salary(), paycheck()], "2026-07");
+    expect(rows).toEqual([{ entry: salary(), paychecks: [], amount: 4000, projection: null }]);
   });
 });
 

@@ -129,7 +129,8 @@ import { useUndo } from "../undo/UndoProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { getRecurrenceTag } from "../utils/recurrence";
-import { describeIncomeProjection, entriesForMonth } from "../utils/billFulfillment";
+import { entriesForMonth, incomeRowsForMonth } from "../utils/billFulfillment";
+import { formatDayLabel } from "../utils/dateFormat";
 import { buildPaceAlerts, pacingClockFor } from "../utils/budgetPacing";
 import SpendingPaceBanner from "../components/SpendingPaceBanner";
 import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
@@ -622,33 +623,21 @@ const BudgetScreen: React.FC = () => {
   );
 
 
-  const incomeEntries = useMemo(
-    () =>
-      monthlyEntries
-        .filter((e) => e.type === "income")
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [monthlyEntries]
+  // The income list, one line per source: paychecks filed against an
+  // earner's recurring income fold into that earner's line (deposits so far
+  // + estimate for the rest) instead of each adding a row under the bank's
+  // raw text. Same total as monthlyEntries - see incomeRowsForMonth.
+  const incomeRows = useMemo(
+    () => incomeRowsForMonth(entries, selectedMonthKey),
+    [entries, selectedMonthKey]
   );
+  /** Earner line whose paychecks are showing underneath it. */
+  const [expandedIncomeId, setExpandedIncomeId] = useState<string | null>(null);
 
-  // Per-row context for the income list: the earner's name (recurring
-  // income and the paychecks filed against it both carry personId) and, on
-  // a recurring row, how many of the month's paychecks have landed - the
-  // row's amount is then the estimate for the ones still to come.
   const personNameById = useMemo(
     () => new Map(people.map((person) => [person.id, person.name])),
     [people]
   );
-  const incomeProgressById = useMemo(() => {
-    const map = new Map<string, { received: number; expected: number }>();
-    for (const entry of incomeEntries) {
-      if (!entry.recurring) continue;
-      const projection = describeIncomeProjection(entry, entries, selectedMonthKey);
-      if (projection && projection.received > 0) {
-        map.set(entry.id, { received: projection.received, expected: projection.expected });
-      }
-    }
-    return map;
-  }, [entries, incomeEntries, selectedMonthKey]);
 
   // W-2 / 1099 rollup for the selected month: 401(k) dollars withheld from
   // paychecks (not part of income totals) and the tax set-aside owed on
@@ -1419,45 +1408,96 @@ const BudgetScreen: React.FC = () => {
             {t("budget.screen.summary.plannedMinimums", { amount: formatCurrency(plannedDebtMinimumTotal) })}
           </Text>
         )}
-        {incomeEntries.length > 0 && (
+        {incomeRows.length > 0 && (
           <View style={styles.incomeSummaryList}>
-            {incomeEntries.map((entry) => (
-              <TouchableOpacity
-                key={entry.id}
-                style={styles.incomeSummaryRow}
-                onPress={() => handleEditEntry(entry.id)}
-                activeOpacity={0.6}
-              >
-                <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
-                  {entry.description || categoryLabel(t, entry.category)}
-                </Text>
-                <View style={styles.incomeSummaryRight}>
-                  {entry.personId && (
-                    <Text style={[styles.incomeSummaryTag, { color: colors.textDim }]} numberOfLines={1}>
-                      👤 {personNameById.get(entry.personId) ?? t("budget.screen.summary.deletedPerson")}
+            {incomeRows.map(({ entry, paychecks, amount, projection }) => {
+              const expanded = projection !== null && expandedIncomeId === entry.id;
+              return (
+                <View key={entry.id}>
+                  <TouchableOpacity
+                    style={styles.incomeSummaryRow}
+                    // A line holding paychecks opens to show them (and its
+                    // estimate); a plain line opens its editor as before.
+                    onPress={() =>
+                      projection
+                        ? setExpandedIncomeId(expanded ? null : entry.id)
+                        : handleEditEntry(entry.id)
+                    }
+                    activeOpacity={0.6}
+                    accessibilityRole="button"
+                    accessibilityState={projection ? { expanded } : undefined}
+                  >
+                    <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
+                      {projection ? (expanded ? "▾ " : "▸ ") : ""}
+                      {entry.description || categoryLabel(t, entry.category)}
                     </Text>
+                    <View style={styles.incomeSummaryRight}>
+                      {entry.personId && (
+                        <Text style={[styles.incomeSummaryTag, { color: colors.textDim }]} numberOfLines={1}>
+                          👤 {personNameById.get(entry.personId) ?? t("budget.screen.summary.deletedPerson")}
+                        </Text>
+                      )}
+                      {entry.incomeType && (
+                        <Text style={[styles.incomeSummaryTag, { color: colors.textDim }]}>
+                          {entry.incomeType === "w2" ? "W-2" : "1099"}
+                        </Text>
+                      )}
+                      {entry.recurring && !projection && (
+                        <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>
+                          {getRecurrenceTag(entry)}
+                        </Text>
+                      )}
+                      {projection && (
+                        <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>
+                          {projection.remainingEstimate > 0
+                            ? t("budget.screen.summary.paychecksIn", {
+                                received: projection.received,
+                                expected: projection.expected,
+                              })
+                            : t("budget.screen.summary.paychecksAllIn", { count: projection.received })}
+                        </Text>
+                      )}
+                      <Text style={[styles.incomeSummaryAmount, { color: colors.success }]}>
+                        {formatCurrency(amount)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  {expanded && (
+                    <View style={styles.incomePaycheckList}>
+                      {paychecks.map((paycheck) => (
+                        <TouchableOpacity
+                          key={paycheck.id}
+                          style={styles.incomeSummaryRow}
+                          onPress={() => handleEditEntry(paycheck.id)}
+                          activeOpacity={0.6}
+                          accessibilityRole="button"
+                        >
+                          <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
+                            {formatDayLabel(paycheck.date)}
+                          </Text>
+                          <Text style={[styles.incomeSummaryAmount, { color: colors.success }]}>
+                            {formatCurrency(paycheck.amount)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                      <TouchableOpacity
+                        style={styles.incomeSummaryRow}
+                        onPress={() => handleEditEntry(entry.id)}
+                        activeOpacity={0.6}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
+                          {t("budget.screen.summary.monthlyEstimate")}
+                        </Text>
+                        <Text style={[styles.incomeSummaryAmount, { color: colors.textDim }]}>
+                          {formatCurrency(entry.amount)}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
-                  {entry.incomeType && (
-                    <Text style={[styles.incomeSummaryTag, { color: colors.textDim }]}>
-                      {entry.incomeType === "w2" ? "W-2" : "1099"}
-                    </Text>
-                  )}
-                  {entry.recurring && !incomeProgressById.has(entry.id) && (
-                    <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>
-                      {getRecurrenceTag(entry)}
-                    </Text>
-                  )}
-                  {incomeProgressById.has(entry.id) && (
-                    <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>
-                      {t("budget.screen.summary.paychecksIn", incomeProgressById.get(entry.id)!)}
-                    </Text>
-                  )}
-                  <Text style={[styles.incomeSummaryAmount, { color: colors.success }]}>
-                    {formatCurrency(entry.amount)}
-                  </Text>
                 </View>
-              </TouchableOpacity>
-            ))}
+              );
+            })}
           </View>
         )}
         {paycheckSummary.retirementContribution > 0 && (
@@ -2301,6 +2341,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       alignItems: "center",
       justifyContent: "space-between",
       paddingVertical: 4,
+    },
+    incomePaycheckList: {
+      marginLeft: 14,
+      paddingLeft: 10,
+      borderLeftWidth: 1,
+      borderLeftColor: colors.cardBorder,
     },
     incomeSummaryDesc: {
       fontSize: 13,

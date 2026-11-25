@@ -34,6 +34,11 @@ export const budgetScreen: LocalizedPlural<typeof en> = {
     retirement: "Плюс {{amount}} в 401(k) в этом месяце (не считается доходом)",
     taxSetAside: "Отложи {{amount}} из дохода 1099 за этот месяц на налоги",
     paychecksIn: "{{received}} из {{expected}} выплат получено · оценка на остаток",
+    paychecksAllIn_one: "{{count}} выплата получена",
+    paychecksAllIn_few: "{{count}} выплаты получено",
+    paychecksAllIn_many: "{{count}} выплат получено",
+    paychecksAllIn_other: "{{count}} выплаты получено",
+    monthlyEstimate: "Оценка на месяц · нажмите, чтобы изменить",
     deletedPerson: "(удалённый человек)",
   },
   selection: {

@@ -33,6 +33,9 @@ export const budgetScreen: Localized<typeof en> = {
     retirement: "Plus {{amount}} till din 401(k) den här månaden (räknas inte som inkomst)",
     taxSetAside: "Sätt undan {{amount}} av månadens 1099-inkomst till skatt",
     paychecksIn: "{{received}} av {{expected}} löner inne · uppskattning för resten",
+    paychecksAllIn_one: "{{count}} lön inne",
+    paychecksAllIn_other: "{{count}} löner inne",
+    monthlyEstimate: "Månatlig uppskattning · tryck för att ändra",
     deletedPerson: "(borttagen person)",
   },
   selection: {

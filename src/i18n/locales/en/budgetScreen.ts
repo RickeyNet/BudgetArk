@@ -33,6 +33,9 @@ export const budgetScreen = {
     retirement: "Plus {{amount}} into your 401(k) this month (not counted as income)",
     taxSetAside: "Set aside {{amount}} of this month's 1099 income for taxes",
     paychecksIn: "{{received}} of {{expected}} paychecks in · est. for the rest",
+    paychecksAllIn_one: "{{count}} paycheck in",
+    paychecksAllIn_other: "{{count}} paychecks in",
+    monthlyEstimate: "Monthly estimate · tap to edit",
     deletedPerson: "(deleted person)",
   },
   selection: {

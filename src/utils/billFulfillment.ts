@@ -250,6 +250,70 @@ export const describeIncomeProjection = (
   };
 };
 
+/** One line of the Budget tab's income list. */
+export interface IncomeRow {
+  /**
+   * The stored record the line stands for - for an earner, the recurring
+   * income itself (never the shrunk copy `entriesForMonth` hands out), so
+   * the line keeps the name the user gave it.
+   */
+  entry: BudgetEntry;
+  /** Deposits filed against `entry` this month, newest first. Empty for an ordinary line. */
+  paychecks: BudgetEntry[];
+  /** What the line adds to the month: deposits so far + estimate for the rest. */
+  amount: number;
+  /** Paycheck progress when deposits are folded in, else null. */
+  projection: IncomeProjection | null;
+}
+
+const dateDesc = (a: BudgetEntry, b: BudgetEntry): number =>
+  new Date(b.date).getTime() - new Date(a.date).getTime();
+
+/**
+ * The month's income as the list shows it: paychecks filed against an
+ * earner's recurring income fold INTO that earner's line instead of each
+ * adding one of its own under the bank's raw text. The line's amount is
+ * "received so far + estimate for the rest", so the rows always sum to the
+ * income `entriesForMonth` counts - this only regroups, it never changes
+ * the math. The earner's line survives after every paycheck is in (when
+ * `entriesForMonth` drops the projection) so the list doesn't swap a tidy
+ * "Maria" for two bank descriptors at month end. Newest first by the
+ * line's own record, so a recurring line never moves when a deposit lands.
+ */
+export const incomeRowsForMonth = (
+  entries: readonly BudgetEntry[],
+  monthKey: string
+): IncomeRow[] => {
+  const fulfilled = fulfillmentsForMonth(entries, monthKey);
+  const folded = new Set<string>();
+  for (const [billId, actuals] of fulfilled) {
+    const bill = entries.find((entry) => entry.id === billId);
+    if (bill?.type !== "income") continue;
+    for (const actual of actuals) folded.add(actual.id);
+  }
+  const rows: IncomeRow[] = [];
+  for (const entry of entries) {
+    if (entry.type !== "income" || folded.has(entry.id)) continue;
+    if (!isEntryActiveInMonth(entry, monthKey)) continue;
+    const actuals = entry.recurring ? fulfilled.get(entry.id) : undefined;
+    if (!actuals || actuals.length === 0) {
+      rows.push({ entry, paychecks: [], amount: entry.amount, projection: null });
+      continue;
+    }
+    const expected = expectedPaychecksInMonth(entry, monthKey);
+    const projected = projectRecurringForMonth(entry, actuals, monthKey);
+    const receivedTotal = roundCents(actuals.reduce((sum, actual) => sum + actual.amount, 0));
+    const remainingEstimate = projected ? projected.amount : 0;
+    rows.push({
+      entry,
+      paychecks: [...actuals].sort(dateDesc),
+      amount: roundCents(receivedTotal + remainingEstimate),
+      projection: { expected, received: actuals.length, receivedTotal, remainingEstimate },
+    });
+  }
+  return rows.sort((a, b) => dateDesc(a.entry, b.entry));
+};
+
 /**
  * Recurring id -> every month key in which some actual fulfils it (same
  * type only). Precomputed once for the multi-month report builders

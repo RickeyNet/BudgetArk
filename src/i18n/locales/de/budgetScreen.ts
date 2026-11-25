@@ -33,6 +33,9 @@ export const budgetScreen: Localized<typeof en> = {
     retirement: "Plus {{amount}} in deine Altersvorsorge (401(k)) diesen Monat (zählt nicht als Einnahme)",
     taxSetAside: "Lege {{amount}} der 1099-Einnahmen dieses Monats für Steuern zurück",
     paychecksIn: "{{received}} von {{expected}} Gehältern da · Schätzung für den Rest",
+    paychecksAllIn_one: "{{count}} Gehalt da",
+    paychecksAllIn_other: "{{count}} Gehälter da",
+    monthlyEstimate: "Monatliche Schätzung · zum Bearbeiten tippen",
     deletedPerson: "(gelöschte Person)",
   },
   selection: {
