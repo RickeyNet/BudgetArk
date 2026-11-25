@@ -80,6 +80,9 @@ export const modalsPeople: Localized<typeof en> = {
     empty:
       "Ingen bedriftsutgifter i {{year}}. Merk en utgift med en bedrift når du legger den til på Budsjett-fanen (opprett bedrifter under Profil → Bedrifter).",
     withReceipt: "{{count}} med kvittering",
+    income: "Inntekter",
+    expenses: "Utgifter",
+    net: "Netto",
     receipts: {
       shareTitle: "Eksporter kvitteringsbilder",
       buttonA11y: "Eksporter kvitteringsbilder som et zip-arkiv",

@@ -9,16 +9,23 @@
  *
  * Business expenses stay in the personal budget math everywhere else; this
  * report is the separated view.
+ *
+ * Income tagged to a business (a client payment approved from the Review
+ * Inbox, a manual deposit) is reported next to the expenses as its own
+ * total, so each business shows what came in, what went out and the net.
+ * The expense fields keep their names and meaning - the receipt export
+ * reads them - and income rides in parallel `income*` fields.
  */
 
 import type { BudgetEntry, Business } from "../types";
 import { getMonthKey } from "./budgetMonths";
 import {
+  entriesForMonth,
   fulfilledMonthsByBill,
   listUnfulfilledOccurrenceMonths,
 } from "./billFulfillment";
 
-/** One expense occurrence attributed to a business within the report year. */
+/** One expense or income occurrence attributed to a business within the report year. */
 export interface BusinessReportLine {
   entryId: string;
   /** YYYY-MM the occurrence lands in (recurring entries expand per month). */
@@ -48,15 +55,27 @@ export interface BusinessReportGroup {
   byCategory: { category: string; total: number }[];
   /** Jan..Dec totals. */
   byMonth: number[];
-  /** Sorted by date ascending. */
+  /** Expense occurrences, sorted by date ascending. */
   lines: BusinessReportLine[];
+  /** Income tagged to the business in the year (0 when there is none). */
+  incomeTotal: number;
+  /** Income occurrences in the year. */
+  incomeCount: number;
+  /** Income occurrences, sorted by date ascending. */
+  incomeLines: BusinessReportLine[];
 }
 
 export interface BusinessReport {
   year: number;
-  /** Sorted by total descending; only businesses with activity in the year. */
+  /**
+   * Sorted by expense total descending (income breaks ties); only
+   * businesses with activity - expenses or income - in the year.
+   */
   perBusiness: BusinessReportGroup[];
+  /** Expenses across every business. */
   grandTotal: number;
+  /** Income across every business. */
+  grandIncomeTotal: number;
 }
 
 const UNKNOWN_BUSINESS_NAME = "(deleted business)";
@@ -82,7 +101,7 @@ const lastDayOfMonth = (monthKey: string): number => {
 export const currentMonthKey = (now: Date = new Date()): string => getMonthKey(now);
 
 /**
- * Aggregates business-tagged expenses for one calendar year.
+ * Aggregates business-tagged expenses and income for one calendar year.
  *
  * @param entries    live budget entries (tombstones already filtered)
  * @param businesses businesses INCLUDING deleted, so a tombstoned client
@@ -107,6 +126,29 @@ export const computeBusinessReport = (
   // projection is skipped there so the bill isn't reported twice.
   const fulfilledMonths = fulfilledMonthsByBill(entries);
 
+  const groupFor = (businessId: string): BusinessReportGroup => {
+    let group = groups.get(businessId);
+    if (!group) {
+      const business = businessById.get(businessId);
+      group = {
+        businessId,
+        name: business?.name ?? UNKNOWN_BUSINESS_NAME,
+        deleted: !business || !!business.deletedAt,
+        total: 0,
+        entryCount: 0,
+        receiptCount: 0,
+        byCategory: [],
+        byMonth: Array.from({ length: 12 }, () => 0),
+        lines: [],
+        incomeTotal: 0,
+        incomeCount: 0,
+        incomeLines: [],
+      };
+      groups.set(businessId, group);
+    }
+    return group;
+  };
+
   if (windowEnd >= windowStart) {
     for (const entry of entries) {
       if (entry.type !== "expense" || !entry.businessId || entry.deletedAt) {
@@ -120,22 +162,7 @@ export const computeBusinessReport = (
       );
       if (months.length === 0) continue;
 
-      let group = groups.get(entry.businessId);
-      if (!group) {
-        const business = businessById.get(entry.businessId);
-        group = {
-          businessId: entry.businessId,
-          name: business?.name ?? UNKNOWN_BUSINESS_NAME,
-          deleted: !business || !!business.deletedAt,
-          total: 0,
-          entryCount: 0,
-          receiptCount: 0,
-          byCategory: [],
-          byMonth: Array.from({ length: 12 }, () => 0),
-          lines: [],
-        };
-        groups.set(entry.businessId, group);
-      }
+      const group = groupFor(entry.businessId);
 
       const originMonth = monthKeyFromISO(entry.date);
       const day = dayFromISO(entry.date);
@@ -161,13 +188,56 @@ export const computeBusinessReport = (
         });
       }
     }
+
+    // Income goes month by month through entriesForMonth - THE membership
+    // rule - because a recurring income estimate does not simply vanish
+    // when a deposit is filed against it the way a bill does: it shrinks
+    // to the paychecks still expected (projectRecurringForMonth). The
+    // yearly shortcut the expenses use above would count it wrong.
+    const hasBusinessIncome = entries.some(
+      (entry) => entry.type === "income" && entry.businessId && !entry.deletedAt
+    );
+    for (
+      let month = 1;
+      hasBusinessIncome && month <= 12;
+      month += 1
+    ) {
+      const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+      if (monthKey > windowEnd) break;
+      for (const entry of entriesForMonth(entries, monthKey)) {
+        if (entry.type !== "income" || !entry.businessId || entry.deletedAt) {
+          continue;
+        }
+        const group = groupFor(entry.businessId);
+        const clampedDay = Math.min(
+          Number(dayFromISO(entry.date)),
+          lastDayOfMonth(monthKey)
+        );
+        group.incomeTotal += entry.amount;
+        group.incomeCount += 1;
+        group.incomeLines.push({
+          entryId: entry.id,
+          monthKey,
+          date: `${monthKey}-${String(clampedDay).padStart(2, "0")}`,
+          category: String(entry.category),
+          description: entry.description,
+          amount: entry.amount,
+          recurring: !!entry.recurring,
+          projected: monthKey !== monthKeyFromISO(entry.date),
+          hasReceipt: (entry.attachments?.length ?? 0) > 0,
+        });
+      }
+    }
   }
 
   let grandTotal = 0;
+  let grandIncomeTotal = 0;
   const perBusiness = Array.from(groups.values());
   for (const group of perBusiness) {
     grandTotal += group.total;
+    grandIncomeTotal += group.incomeTotal;
     group.lines.sort((a, b) => a.date.localeCompare(b.date));
+    group.incomeLines.sort((a, b) => a.date.localeCompare(b.date));
 
     const catTotals = new Map<string, number>();
     for (const line of group.lines) {
@@ -178,9 +248,11 @@ export const computeBusinessReport = (
       total,
     })).sort((a, b) => b.total - a.total);
   }
-  perBusiness.sort((a, b) => b.total - a.total);
+  perBusiness.sort(
+    (a, b) => b.total - a.total || b.incomeTotal - a.incomeTotal
+  );
 
-  return { year, perBusiness, grandTotal };
+  return { year, perBusiness, grandTotal, grandIncomeTotal };
 };
 
 /**
@@ -203,14 +275,21 @@ const csvCell = (raw: string | number | boolean): string => {
  */
 export const buildBusinessReportCsv = (report: BusinessReport): string => {
   const rows: string[] = [
-    "Date,Business,Category,Description,Amount,Recurring,HasReceipt",
+    "Date,Business,Type,Category,Description,Amount,Recurring,HasReceipt",
   ];
   for (const group of report.perBusiness) {
-    for (const line of group.lines) {
+    // Expenses first, then income - each block already in date order, and
+    // the Type column lets an accountant filter or sum either side.
+    const typed = [
+      ...group.lines.map((line) => ({ line, type: "Expense" })),
+      ...group.incomeLines.map((line) => ({ line, type: "Income" })),
+    ];
+    for (const { line, type } of typed) {
       rows.push(
         [
           csvCell(line.date),
           csvCell(group.name),
+          csvCell(type),
           csvCell(line.category),
           csvCell(line.description ?? ""),
           csvCell(line.amount),

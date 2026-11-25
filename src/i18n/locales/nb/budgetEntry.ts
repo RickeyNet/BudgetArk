@@ -150,6 +150,7 @@ export const budgetEntry: Localized<typeof en> = {
     label: "BEDRIFT (VALGFRITT)",
     hintEdit: "Merk denne utgiften med en bedrift for skatterapporten.",
     hintAdd: "Merk denne utgiften med en bedrift for skatterapporten. Den teller fortsatt i det personlige budsjettet ditt.",
+    hintIncome: "Merk denne inntekten med en bedrift, så vises den i bedriftsrapporten. Den teller fortsatt i det personlige budsjettet ditt.",
     personal: "Personlig",
     deleted: "💼 (slettet bedrift)",
   },

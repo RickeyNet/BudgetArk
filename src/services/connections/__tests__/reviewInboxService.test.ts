@@ -266,7 +266,7 @@ describe("approvePendingTransaction", () => {
     expect(nobody?.personIds).toBeUndefined();
   });
 
-  it("never sets business/person on an income entry even if opts provide them", async () => {
+  it("tags an income entry with the picked business, but never with expense people", async () => {
     const item = makePendingTransaction({
       id: "p-income-biz",
       amount: 1500,
@@ -279,9 +279,40 @@ describe("approvePendingTransaction", () => {
       businessId: "biz-1",
       personIds: ["per-1", "per-2"],
     });
-    expect(entry?.businessId).toBeUndefined();
+    expect(entry?.type).toBe("income");
+    expect(entry?.businessId).toBe("biz-1");
     expect(entry?.personId).toBeUndefined();
     expect(entry?.personIds).toBeUndefined();
+  });
+
+  it("remembers the business on an income rule and falls back to the suggestion", async () => {
+    const first = makePendingTransaction({
+      id: "p-client-1",
+      amount: 800,
+      suggestedType: "income",
+      merchant: "ACME CLIENT",
+    });
+    const second = makePendingTransaction({
+      id: "p-client-2",
+      amount: 900,
+      suggestedType: "income",
+      merchant: "ACME CLIENT",
+      suggestedBusinessId: "biz-1",
+    });
+    seed(INBOX_KEY, [first, second]);
+    await approvePendingTransaction({
+      pendingId: first.id,
+      category: "Salary",
+      businessId: "biz-1",
+      rememberRule: true,
+    });
+    expect(rulesNow()[0]).toMatchObject({ type: "income", businessId: "biz-1" });
+    // Bulk approval passes no businessId - the rule-derived suggestion wins.
+    const next = await approvePendingTransaction({
+      pendingId: second.id,
+      category: "Salary",
+    });
+    expect(next?.businessId).toBe("biz-1");
   });
 
   it("records the pending fingerprint on the ledger entry only while the item is still pending", async () => {

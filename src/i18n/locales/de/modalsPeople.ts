@@ -80,6 +80,9 @@ export const modalsPeople: Localized<typeof en> = {
     empty:
       "Keine Geschäftsausgaben in {{year}}. Ordne eine Ausgabe beim Hinzufügen im Budget-Tab einem Geschäft zu (Geschäfte legst du unter Profil → Geschäfte an).",
     withReceipt: "{{count}} mit Beleg",
+    income: "Einnahmen",
+    expenses: "Ausgaben",
+    net: "Netto",
     receipts: {
       shareTitle: "Belegfotos exportieren",
       buttonA11y: "Belegfotos als ZIP-Archiv exportieren",

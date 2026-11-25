@@ -26,12 +26,12 @@ const entry = (over: Partial<BudgetEntry> = {}): BudgetEntry => ({
 });
 
 describe("computeBusinessReport", () => {
-  it("totals per business, expenses only, year-filtered", () => {
+  it("totals expenses per business, year-filtered, with income kept apart", () => {
     const report = computeBusinessReport(
       [
         entry({ id: "e1", amount: 100 }),
         entry({ id: "e2", amount: 50, category: "Travel" }),
-        // Income never counts even if somehow tagged.
+        // Tagged income is reported on its own, never in the expense totals.
         entry({ id: "e3", type: "income", category: "Freelance", amount: 999 }),
         // Untagged expense ignored.
         entry({ id: "e4", businessId: undefined, amount: 77 }),
@@ -47,6 +47,10 @@ describe("computeBusinessReport", () => {
     expect(acme.total).toBe(150);
     expect(acme.entryCount).toBe(2);
     expect(report.grandTotal).toBe(150);
+    expect(acme.incomeTotal).toBe(999);
+    expect(acme.incomeCount).toBe(1);
+    expect(acme.incomeLines.map((l) => l.entryId)).toEqual(["e3"]);
+    expect(report.grandIncomeTotal).toBe(999);
     expect(acme.byMonth[2]).toBe(150); // March
     expect(acme.deleted).toBe(false);
   });
@@ -147,6 +151,75 @@ describe("computeBusinessReport", () => {
     expect(feb?.date).toBe("2026-02-28");
   });
 
+  it("reports a business that only has income, and ignores untagged or off-year income", () => {
+    const report = computeBusinessReport(
+      [
+        entry({ id: "i1", type: "income", category: "Freelance", amount: 800 }),
+        entry({
+          id: "i2",
+          type: "income",
+          category: "Freelance",
+          amount: 200,
+          date: "2026-05-02T12:00:00.000Z",
+        }),
+        entry({ id: "i3", type: "income", businessId: undefined, amount: 5000 }),
+        entry({
+          id: "i4",
+          type: "income",
+          amount: 70,
+          date: "2025-05-02T12:00:00.000Z",
+        }),
+      ],
+      [business()],
+      2026,
+      "2026-12"
+    );
+    expect(report.perBusiness).toHaveLength(1);
+    const acme = report.perBusiness[0];
+    expect(acme.total).toBe(0);
+    expect(acme.entryCount).toBe(0);
+    expect(acme.incomeTotal).toBe(1000);
+    expect(acme.incomeLines.map((l) => l.date)).toEqual(["2026-03-15", "2026-05-02"]);
+    expect(report.grandTotal).toBe(0);
+    expect(report.grandIncomeTotal).toBe(1000);
+  });
+
+  it("counts recurring business income per month, shrinking for deposits filed against it", () => {
+    const report = computeBusinessReport(
+      [
+        // Retainer estimate, monthly from January; capped at March.
+        entry({
+          id: "r1",
+          type: "income",
+          category: "Freelance",
+          amount: 1000,
+          recurring: true,
+          date: "2026-01-10T12:00:00.000Z",
+        }),
+        // February's real deposit replaces that month's estimate.
+        entry({
+          id: "d1",
+          type: "income",
+          category: "Freelance",
+          amount: 1150,
+          date: "2026-02-12T12:00:00.000Z",
+          fulfillsRecurringId: "r1",
+        }),
+      ],
+      [business()],
+      2026,
+      "2026-03"
+    );
+    const acme = report.perBusiness[0];
+    // Jan estimate + Feb actual + Mar estimate; nothing projected past March.
+    expect(acme.incomeTotal).toBe(3150);
+    expect(acme.incomeLines.map((l) => [l.date, l.amount, l.projected])).toEqual([
+      ["2026-01-10", 1000, false],
+      ["2026-02-12", 1150, false],
+      ["2026-03-10", 1000, true],
+    ]);
+  });
+
   it("currentMonthKey formats a local YYYY-MM", () => {
     expect(currentMonthKey(new Date(2026, 6, 12))).toBe("2026-07");
   });
@@ -168,11 +241,36 @@ describe("buildBusinessReportCsv", () => {
     );
     const csv = buildBusinessReportCsv(report);
     const [header, row] = csv.split("\n");
-    expect(header).toBe("Date,Business,Category,Description,Amount,Recurring,HasReceipt");
+    expect(header).toBe(
+      "Date,Business,Type,Category,Description,Amount,Recurring,HasReceipt"
+    );
+    expect(row).toContain(",Expense,");
     expect(row).toContain('"Acme, LLC"');
     expect(row).toContain('"Monitor, 27"" (office)"');
     expect(row).toContain("12.5");
     expect(row).toContain("no,no");
+  });
+
+  it("lists income rows after the expenses, marked by type", () => {
+    const report = computeBusinessReport(
+      [
+        entry({ id: "e1", amount: 40 }),
+        entry({
+          id: "i1",
+          type: "income",
+          category: "Freelance",
+          amount: 800,
+          date: "2026-01-05T12:00:00.000Z",
+        }),
+      ],
+      [business()],
+      2026,
+      "2026-12"
+    );
+    const rows = buildBusinessReportCsv(report).split("\n");
+    expect(rows).toHaveLength(3);
+    expect(rows[1]).toBe("2026-03-15,Acme Consulting LLC,Expense,Tech,,40,no,no");
+    expect(rows[2]).toBe("2026-01-05,Acme Consulting LLC,Income,Freelance,,800,no,no");
   });
 
   it("defuses formula-injection cells", () => {

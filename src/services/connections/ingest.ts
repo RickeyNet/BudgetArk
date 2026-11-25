@@ -43,7 +43,12 @@ import type {
   SkippedReason,
 } from "../../types";
 import type { NormalizedTransaction } from "./types";
-import { matchMerchantRule, normalizeMerchant, suggestedPeopleFor } from "./merchant";
+import {
+  matchMerchantRule,
+  normalizeMerchant,
+  suggestedBusinessFor,
+  suggestedPeopleFor,
+} from "./merchant";
 import { personAssignmentFields } from "../../utils/entryPeople";
 import CryptoJS from "crypto-js";
 
@@ -534,8 +539,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       rule,
       suggestedCategory: rule?.category,
       suggestedName: rule?.renameTo,
-      suggestedBusinessId:
-        suggestedType === "expense" ? rule?.businessId : undefined,
+      suggestedBusinessId: suggestedBusinessFor(rule, suggestedType),
       suggestedPersonId,
       suggestedPersonIds,
       // A bill for an outflow, an earner's income for a deposit - the type

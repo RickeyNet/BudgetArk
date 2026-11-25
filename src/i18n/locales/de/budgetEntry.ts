@@ -150,6 +150,7 @@ export const budgetEntry: Localized<typeof en> = {
     label: "UNTERNEHMEN (OPTIONAL)",
     hintEdit: "Ordne diese Ausgabe einem Unternehmen für den Steuerbericht zu.",
     hintAdd: "Ordne diese Ausgabe einem Unternehmen für den Steuerbericht zu. Sie zählt weiterhin in deinem privaten Budget.",
+    hintIncome: "Ordne diese Einnahme einem Unternehmen zu, damit sie im Geschäftsbericht erscheint. Sie zählt weiterhin in deinem privaten Budget.",
     personal: "Privat",
     deleted: "💼 (gelöschtes Unternehmen)",
   },

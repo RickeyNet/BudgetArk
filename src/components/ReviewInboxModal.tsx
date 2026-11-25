@@ -6,7 +6,7 @@
  * posted date, with heuristic sections ("Likely transfers", "Possibly already
  * in your budget") that offer a Skip-all shortcut. Each row expands into a
  * name field (rename the noisy bank text), a category picker, a business
- * picker (expenses, when businesses exist), an "Applies to bill" picker
+ * picker (expenses and deposits, when businesses exist), an "Applies to bill" picker
  * that lists the month's recurring bills AND the Debt tracker's debts (a
  * card payment logged against its debt records a Payment there instead of
  * an expense - utils/inboxDebtPayments), and an "always do this" rule
@@ -122,7 +122,7 @@ interface ReviewInboxModalProps {
   visible: boolean;
   onClose: () => void;
   customCategories: CustomCategory[];
-  /** Live businesses, for expense tagging. Empty = picker hidden. */
+  /** Live businesses, for tagging expenses and deposits. Empty = picker hidden. */
   businesses: Business[];
   /** Live people, for assigning who spent it. Empty = picker hidden. */
   people: Person[];
@@ -396,9 +396,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       if (prev === item.id) return null;
       setDraftCategory(item.suggestedCategory ?? DEFAULT_CATEGORY);
       setDraftName(item.suggestedName ?? item.description);
-      setDraftBusinessId(
-        item.suggestedType === "expense" ? item.suggestedBusinessId : undefined,
-      );
+      // Either direction: a client's payment is the business's income.
+      setDraftBusinessId(item.suggestedBusinessId);
       setDraftPersonIds(
         item.suggestedType === "expense"
           ? entryPersonIds({
@@ -424,6 +423,22 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       return item.id;
     });
   }, []);
+
+  // A deposit filed against a business's recurring income (a retainer)
+  // belongs to that business: prefill the tag so the estimate it replaces
+  // and the deposit report under the same business. Only fills an empty
+  // pick - the user's own choice, or "Personal" tapped afterwards, stands.
+  const handlePickApplyTo = useCallback(
+    (id: string | undefined) => {
+      setDraftRecurringId(id);
+      const picked = id ? entries.find((entry) => entry.id === id) : undefined;
+      if (picked?.type === "income" && picked.businessId) {
+        const pickedBusinessId = picked.businessId;
+        setDraftBusinessId((prev) => prev ?? pickedBusinessId);
+      }
+    },
+    [entries],
+  );
 
   const handleApprove = useCallback(
     async (
@@ -1090,8 +1105,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   />
               </>
             ) : null}
-            {item.suggestedType === "expense" &&
-            (businesses.length > 0 || draftBusinessId) ? (
+            {businesses.length > 0 || draftBusinessId ? (
               <>
                 <Text style={styles.label}>{t("budget.inbox.form.businessLabel")}</Text>
                 <TagPillPicker
@@ -1127,7 +1141,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     <TagPillPicker
                       options={applyToOptions}
                       value={draftRecurringId}
-                      onChange={setDraftRecurringId}
+                      onChange={handlePickApplyTo}
                       noneLabel={applyToNone}
                       glyph={applyToGlyph}
                     />

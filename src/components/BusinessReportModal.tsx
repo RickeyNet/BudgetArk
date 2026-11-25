@@ -6,7 +6,9 @@
  * category breakdown and a one-way CSV export. Data is loaded on open and
  * aggregated by the pure helpers in utils/businessReport.ts. Business
  * expenses stay in the personal budget math everywhere else - this modal is
- * the separated view.
+ * the separated view. A business with income tagged to it (client payments
+ * from the Review Inbox, manual deposits) also gets an income / expenses /
+ * net summary; businesses without any keep the expense-only card.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -242,6 +244,26 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
                 <Text style={styles.grandTotalValue}>
                   {formatCurrency(report.grandTotal)}
                 </Text>
+                {report.grandIncomeTotal > 0 ? (
+                  <View style={styles.grandSummary}>
+                    <View style={styles.categoryRow}>
+                      <Text style={styles.summaryName}>
+                        {t("modals.people.businessReport.income")}
+                      </Text>
+                      <Text style={styles.summaryValue}>
+                        {formatCurrency(report.grandIncomeTotal)}
+                      </Text>
+                    </View>
+                    <View style={styles.categoryRow}>
+                      <Text style={styles.summaryName}>
+                        {t("modals.people.businessReport.net")}
+                      </Text>
+                      <Text style={styles.summaryValue}>
+                        {formatCurrency(report.grandIncomeTotal - report.grandTotal)}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
               </View>
             )}
 
@@ -264,12 +286,15 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
                       {formatCurrency(group.total)}
                     </Text>
                   </View>
-                  <Text style={styles.businessMeta}>
-                    {t("modals.people.report.expenses", { count: group.entryCount })}
-                    {group.receiptCount > 0
-                      ? ` · ${t("modals.people.businessReport.withReceipt", { count: group.receiptCount })}`
-                      : ""}
-                  </Text>
+                  {/* An income-only business has no expenses to count. */}
+                  {group.entryCount > 0 ? (
+                    <Text style={styles.businessMeta}>
+                      {t("modals.people.report.expenses", { count: group.entryCount })}
+                      {group.receiptCount > 0
+                        ? ` · ${t("modals.people.businessReport.withReceipt", { count: group.receiptCount })}`
+                        : ""}
+                    </Text>
+                  ) : null}
                   {group.byCategory.map(({ category, total }) => (
                     <View key={category} style={styles.categoryRow}>
                       <Text style={styles.categoryName} numberOfLines={1}>
@@ -280,6 +305,34 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
                       </Text>
                     </View>
                   ))}
+                  {group.incomeCount > 0 ? (
+                    <View style={styles.cardSummary}>
+                      <View style={styles.categoryRow}>
+                        <Text style={styles.summaryName}>
+                          {t("modals.people.businessReport.income")}
+                        </Text>
+                        <Text style={styles.summaryValue}>
+                          {formatCurrency(group.incomeTotal)}
+                        </Text>
+                      </View>
+                      <View style={styles.categoryRow}>
+                        <Text style={styles.summaryName}>
+                          {t("modals.people.businessReport.expenses")}
+                        </Text>
+                        <Text style={styles.summaryValue}>
+                          {formatCurrency(group.total)}
+                        </Text>
+                      </View>
+                      <View style={styles.categoryRow}>
+                        <Text style={styles.summaryName}>
+                          {t("modals.people.businessReport.net")}
+                        </Text>
+                        <Text style={styles.summaryValue}>
+                          {formatCurrency(group.incomeTotal - group.total)}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
                 </View>
               ))
             )}
@@ -459,6 +512,30 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textDim,
       fontSize: 13,
       fontWeight: "600",
+    },
+    cardSummary: {
+      marginTop: 6,
+      paddingTop: 6,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    grandSummary: {
+      alignSelf: "stretch",
+      marginTop: 8,
+      paddingTop: 6,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    summaryName: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    summaryValue: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: "700",
     },
     buttonRow: {
       flexDirection: "row",

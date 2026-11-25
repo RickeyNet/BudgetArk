@@ -212,8 +212,8 @@ export interface CustomCategory {
 export const CUSTOM_CATEGORY_STORAGE_VERSION = 1;
 
 /**
- * A business the user tags expense entries with (freelance clients, an
- * LLC, a side company). Unlike CustomCategory this IS tombstoned: entries
+ * A business the user tags entries with - its expenses and the income it
+ * earns (freelance clients, an LLC, a side company). Unlike CustomCategory this IS tombstoned: entries
  * reference businesses by id, so deletes must propagate through P2P sync
  * instead of silently dropping from one device's list.
  */
@@ -413,8 +413,9 @@ export interface BudgetEntry {
    */
   merchant?: string;
   /**
-   * Business this expense belongs to (see `Business`). Expenses only - the
-   * UI never sets it on income and clears it when an entry's type flips.
+   * Business this entry belongs to (see `Business`): an expense the
+   * business paid, or income it earned (a client payment approved from the
+   * Review Inbox, a manual deposit). Kept when an entry's type flips.
    * A dangling id (business deleted, or not yet arrived via sync) is
    * harmless: report/badge surfaces show it as "(deleted business)".
    */
@@ -911,8 +912,11 @@ export interface PendingTransaction {
    */
   suggestedName?: string;
   /**
-   * From a matched MerchantRule's `businessId`. Expenses only (mirrors
-   * BudgetEntry.businessId) - never set on inflows.
+   * From a matched MerchantRule's `businessId` (mirrors
+   * BudgetEntry.businessId). Set only when the transaction runs the same
+   * direction as the rule (services/connections/merchant
+   * suggestedBusinessFor): a deposit rule tags deposits as the business's
+   * income, an expense rule never tags that merchant's refunds.
    */
   suggestedBusinessId?: string;
   /**
@@ -1018,7 +1022,8 @@ export interface MerchantRule {
    */
   renameTo?: string;
   /**
-   * Business to tag future approved expenses with (see BudgetEntry.businessId).
+   * Business to tag future approved entries with - expenses and income
+   * alike (see BudgetEntry.businessId).
    * A dangling id (business deleted) is harmless - approval just produces an
    * entry whose business shows as "(deleted business)", same as manual entries.
    * Unread while action is "ignore".

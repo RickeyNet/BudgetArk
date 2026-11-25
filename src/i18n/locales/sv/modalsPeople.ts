@@ -80,6 +80,9 @@ export const modalsPeople: Localized<typeof en> = {
     empty:
       "Inga företagsutgifter {{year}}. Tagga en utgift till ett företag när du lägger till den på Budget-fliken (skapa företag under Profil → Företag).",
     withReceipt: "{{count}} med kvitto",
+    income: "Inkomster",
+    expenses: "Utgifter",
+    net: "Netto",
     receipts: {
       shareTitle: "Exportera kvittofoton",
       buttonA11y: "Exportera kvittofoton som ett zip-arkiv",

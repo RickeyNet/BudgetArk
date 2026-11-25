@@ -87,6 +87,9 @@ export const modalsPeople: LocalizedPlural<typeof en> = {
     empty:
       "Нет деловых расходов за {{year}}. Отмечай расход как расход бизнеса при добавлении на вкладке «Бюджет» (бизнесы создаются в Профиль → Бизнесы).",
     withReceipt: "{{count}} с чеком",
+    income: "Доходы",
+    expenses: "Расходы",
+    net: "Итого",
     receipts: {
       shareTitle: "Экспорт фото чеков",
       buttonA11y: "Экспортировать фото чеков как zip-архив",

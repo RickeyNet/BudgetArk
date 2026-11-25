@@ -73,6 +73,7 @@ import {
   renameForRule,
   replanInboxForRules,
   selectAutoApprovable,
+  suggestedBusinessFor,
 } from "./merchant";
 import { normalizeLentTo } from "../../utils/loans";
 
@@ -89,7 +90,7 @@ export interface ApproveOptions {
    */
   description?: string;
   /**
-   * Business to tag the entry with (expenses only). `null` = explicitly
+   * Business to tag the entry with (expense or income). `null` = explicitly
    * personal; undefined = fall back to the item's rule-suggested business.
    */
   businessId?: string | null;
@@ -178,12 +179,11 @@ export const approvePendingTransaction = async (
   )
     .slice(0, MAX_DESCRIPTION_LENGTH)
     .trim();
+  // Either direction: a business pays expenses and receives payments.
   const businessId =
-    type === "expense"
-      ? (opts.businessId === null
-          ? undefined
-          : opts.businessId ?? item.suggestedBusinessId)
-      : undefined;
+    opts.businessId === null
+      ? undefined
+      : opts.businessId ?? item.suggestedBusinessId;
   // The bill (outflow) or earner's recurring income (deposit) this stands in
   // for, re-validated against the live entries including the type match.
   const fulfilled = await resolveFulfillment(
@@ -709,7 +709,9 @@ export const autoApproveInboxByRules = async (): Promise<number> => {
       description: rule.renameTo ?? item.description,
       // null = explicitly what the rule says (or nothing), never a stale
       // per-item suggestion from an older rule version.
-      businessId: rule.businessId ?? null,
+      // Direction-matched: an expense rule's business never lands on that
+      // merchant's refund (see suggestedBusinessFor).
+      businessId: suggestedBusinessFor(rule, item.suggestedType) ?? null,
       personIds: entryPersonIds(rule),
       fulfillsRecurringId: rule.recurringEntryId ?? null,
     });

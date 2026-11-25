@@ -8,7 +8,11 @@
  * every visit to the same merchant. Pure - node-testable.
  */
 
-import type { MerchantRule, PendingTransaction } from "../../types";
+import type {
+  BudgetEntryType,
+  MerchantRule,
+  PendingTransaction,
+} from "../../types";
 import { sanitizeTextInput } from "../../utils/sanitize";
 import { entryPersonIds, personAssignmentFields } from "../../utils/entryPeople";
 
@@ -26,6 +30,20 @@ export const suggestedPeopleFor = (
   if (fromRule.length > 0) return fromRule;
   return cardPersonId ? [cardPersonId] : [];
 };
+
+/**
+ * The business a transaction from this merchant should be tagged with: the
+ * matched rule's, but only when the transaction runs the same direction as
+ * the rule. A rule saved from a client's deposit tags that client's future
+ * deposits as the business's income; a rule saved from a business expense
+ * deliberately does NOT tag the same merchant's refunds, which would
+ * otherwise be reported as money the business earned. Shared by ingest,
+ * replanInboxForRules and rule auto-approval.
+ */
+export const suggestedBusinessFor = (
+  rule: MerchantRule | undefined,
+  type: BudgetEntryType,
+): string | undefined => (rule && rule.type === type ? rule.businessId : undefined);
 
 const sameIds = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((id, i) => id === b[i]);
@@ -171,8 +189,7 @@ export const replanInboxForRules = (
     }
     const suggestedCategory = rule?.category;
     const suggestedName = rule?.renameTo;
-    const suggestedBusinessId =
-      item.suggestedType === "expense" ? rule?.businessId : undefined;
+    const suggestedBusinessId = suggestedBusinessFor(rule, item.suggestedType);
     const people =
       item.suggestedType === "expense"
         ? suggestedPeopleFor(rule, personIdByAccount?.get(item.externalAccountId))

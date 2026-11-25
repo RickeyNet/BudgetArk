@@ -69,7 +69,7 @@ interface MerchantRulesModalProps {
   visible: boolean;
   onClose: () => void;
   customCategories: CustomCategory[];
-  /** Live businesses, for the expense business tag. Empty = pills hidden. */
+  /** Live businesses, for the business tag (expense and income rules). Empty = pills hidden. */
   businesses: Business[];
   /** Live people, for the expense person assignment. Empty = pills hidden. */
   people: Person[];
@@ -460,9 +460,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                 />
               </>
             ) : null}
-            {!draftIgnore &&
-            rule.type === "expense" &&
-            (businesses.length > 0 || draftBusinessId) ? (
+            {!draftIgnore && (businesses.length > 0 || draftBusinessId) ? (
               <>
                 <Text style={styles.label}>{t("modals.data.rules.editor.businessLabel")}</Text>
                 <TagPillPicker

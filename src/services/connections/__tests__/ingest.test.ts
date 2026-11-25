@@ -815,7 +815,7 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(inflow.newInboxItems[0].suggestedDebtId).toBeUndefined();
   });
 
-  it("never suggests a business or person on an inflow", () => {
+  it("never suggests an expense rule's business or person on an inflow", () => {
     const rules: MerchantRule[] = [
       {
         id: "r1",
@@ -836,6 +836,24 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(plan.newInboxItems[0].suggestedName).toBe("Costco");
     expect(plan.newInboxItems[0].suggestedBusinessId).toBeUndefined();
     expect(plan.newInboxItems[0].suggestedPersonId).toBeUndefined();
+  });
+
+  it("suggests an income rule's business on a deposit", () => {
+    const rules: MerchantRule[] = [
+      {
+        id: "r1",
+        merchantKey: "COSTCO WHSE",
+        category: "Salary",
+        type: "income",
+        businessId: "biz-1",
+        useCount: 3,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ];
+    const plan = planIngest(baseInputs({ rules, fetched: [tx({ amount: 800 })] }));
+    expect(plan.newInboxItems[0].suggestedType).toBe("income");
+    expect(plan.newInboxItems[0].suggestedBusinessId).toBe("biz-1");
   });
 
   it("falls back to the link's person (whose card) when no rule names one", () => {

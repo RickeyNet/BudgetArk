@@ -172,7 +172,7 @@ describe("replanInboxForRules", () => {
     expect(plan.updatedItems[0].suggestedPersonId).toBe("per-1");
   });
 
-  it("clears a stale name/business/person and never tags income with them", () => {
+  it("clears a stale name/business/person and never tags a refund with an expense rule's", () => {
     const tagged: PendingTransaction = {
       ...item("a", "COSTCO WHSE", "Grocery"),
       suggestedName: "Costco",
@@ -196,6 +196,21 @@ describe("replanInboxForRules", () => {
       NOW,
     );
     expect(incomePlan.updatedItems).toEqual([]);
+  });
+
+  it("tags a deposit with the business of a matching income rule", () => {
+    const deposit: PendingTransaction = {
+      ...item("c", "ACME CLIENT", "Salary"),
+      amount: 800,
+      suggestedType: "income",
+    };
+    const plan = replanInboxForRules(
+      [deposit],
+      [{ ...rule("ACME CLIENT", "Salary"), type: "income", businessId: "biz-1" }],
+      NOW,
+    );
+    expect(plan.updatedItems).toHaveLength(1);
+    expect(plan.updatedItems[0].suggestedBusinessId).toBe("biz-1");
   });
 
   it("keeps the account-level person fallback when no rule names one", () => {

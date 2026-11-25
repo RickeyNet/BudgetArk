@@ -80,6 +80,10 @@ export const modalsPeople = {
     empty:
       "No business expenses in {{year}}. Tag an expense to a business when adding it on the Budget tab (create businesses under Profile → Businesses).",
     withReceipt: "{{count}} with receipt",
+    /** Per-business and grand-total rows shown once a business has tagged income. */
+    income: "Income",
+    expenses: "Expenses",
+    net: "Net",
     receipts: {
       shareTitle: "Export Receipt Photos",
       buttonA11y: "Export receipt photos as a zip archive",

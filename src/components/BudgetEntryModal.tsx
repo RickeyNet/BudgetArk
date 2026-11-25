@@ -470,18 +470,17 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const showAccountPicker =
     LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
 
-  // Business tagging is expense-only; the row appears once the user has
-  // created a business - or, in edit mode, when the entry is already tagged
-  // with a business that has since been deleted (the user must be able to
-  // untag).
-  const showBusinessPicker =
-    type === "expense" && (businesses.length > 0 || !!businessId);
+  // Business tagging covers expenses and income (a client's payment is the
+  // business's income); the row appears once the user has created a
+  // business - or, in edit mode, when the entry is already tagged with a
+  // business that has since been deleted (the user must be able to untag).
+  const showBusinessPicker = businesses.length > 0 || !!businessId;
   const taggedBusinessMissing =
     !!businessId && !businesses.some((b) => b.id === businessId);
 
-  // People assignment mirrors the business picker (expense-only, appears
-  // once a person exists, must allow untagging a deleted person) except
-  // that it's MULTI-select: a grocery run is the whole family's.
+  // People assignment mirrors the business picker (appears once a person
+  // exists, must allow untagging a deleted person) except that it's
+  // expense-only and MULTI-select: a grocery run is the whole family's.
   const showPersonPicker =
     type === "expense" && (people.length > 0 || personIds.length > 0);
   // "Lent to someone?" - one-off expenses only (a recurring bill is never a
@@ -721,14 +720,13 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         ? normalizePaymentUrl(paymentUrl) ?? undefined
         : undefined,
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
-      // Cleared when the type flips to income (mirrors linkedAccountId).
-      businessId: type === "expense" ? businessId : undefined,
+      // Kept across a type flip: income belongs to a business too.
+      businessId,
       // Expenses: who spent it. Income: the earner (or the earner of the
       // recurring income this deposit is filed against).
       ...personAssignmentFields(type === "expense" ? personIds : incomePersonIds),
       payFrequency: type === "income" && recurring ? payFrequency : undefined,
-      // Cleared when the type flips to expense or the income type changes
-      // (mirrors businessId in the other direction).
+      // Cleared when the type flips to expense or the income type changes.
       incomeType: entryIncomeType,
       retirementContribution:
         entryIncomeType === "w2" && contributionNum > 0
@@ -1459,9 +1457,11 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         <View style={styles.field}>
           <Text style={styles.label}>{t("budget.entry.business.label")}</Text>
           <Text style={styles.accountPickerHint}>
-            {isEdit
-              ? t("budget.entry.business.hintEdit")
-              : t("budget.entry.business.hintAdd")}
+            {type === "income"
+              ? t("budget.entry.business.hintIncome")
+              : isEdit
+                ? t("budget.entry.business.hintEdit")
+                : t("budget.entry.business.hintAdd")}
           </Text>
           <View style={styles.categoryWrap}>
             <TouchableOpacity
