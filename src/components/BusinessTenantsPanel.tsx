@@ -4,7 +4,7 @@
  *
  * The rent roll of one business (a rental property): its tenants, each
  * one's monthly rent, what they owe right now, the month-by-month record
- * and a quick "log payment". All arithmetic is utils/tenants - rent falls
+ * a quick "log payment", and late fees / one-off charges. All arithmetic is utils/tenants - rent falls
  * due every month and income tagged to the tenant pays it down, so a short
  * payment simply leaves the rest owing.
  *
@@ -36,8 +36,14 @@ import { useCurrency } from "../currency/CurrencyProvider";
 import { useBusinesses } from "../people/PeopleProvider";
 import { addBudgetEntry } from "../storage/budgetStorage";
 import type { BudgetEntry, Business, RentTerm } from "../types";
-import { MAX_TENANT_NAME_LENGTH, MAX_TENANTS_PER_BUSINESS } from "../types";
 import {
+  MAX_TENANT_CHARGE_NOTE_LENGTH,
+  MAX_TENANT_NAME_LENGTH,
+  MAX_TENANTS_PER_BUSINESS,
+} from "../types";
+import {
+  addTenantCharge,
+  removeTenantCharge,
   buildRentRoll,
   buildTenant,
   businessTenants,
@@ -100,6 +106,9 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
 
   const [form, setForm] = useState<TenantForm | null>(null);
   const [paymentFor, setPaymentFor] = useState<string | null>(null);
+  /** Tenant whose "add charge" form (late fee / one-off) is open. */
+  const [chargeFor, setChargeFor] = useState<string | null>(null);
+  const [draftNote, setDraftNote] = useState("");
   const [draftAmount, setDraftAmount] = useState("");
   const [draftDate, setDraftDate] = useState("");
   const [historyFor, setHistoryFor] = useState<string | null>(null);
@@ -121,6 +130,7 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
       terms: [],
     });
     setPaymentFor(null);
+    setChargeFor(null);
     setError(null);
   }, []);
 
@@ -137,6 +147,7 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
       terms: tenant.rents,
     });
     setPaymentFor(null);
+    setChargeFor(null);
     setError(null);
   }, []);
 
@@ -208,6 +219,8 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
       dueDay,
       openingBalance: opening,
       endMonth: endMonth || undefined,
+      // Late fees / charges are edited on the card, not in this form.
+      charges: existing?.charges,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     });
     if (!built) {
@@ -267,8 +280,80 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
     );
     setDraftDate(toLocalDateKey(new Date()));
     setForm(null);
+    setChargeFor(null);
     setError(null);
   }, []);
+
+  const openCharge = useCallback(
+    (ledger: TenantLedger) => {
+      setChargeFor(ledger.tenant.id);
+      // A late fee is the common case; the label is editable.
+      setDraftNote(t("modals.people.tenants.lateFee"));
+      setDraftAmount("");
+      setDraftDate(toLocalDateKey(new Date()));
+      setForm(null);
+      setPaymentFor(null);
+      setError(null);
+    },
+    [t]
+  );
+
+  const handleSaveCharge = useCallback(
+    async (ledger: TenantLedger) => {
+      if (busy) return;
+      const amount = parseMoneyInput(draftAmount) ?? 0;
+      if (!(amount > 0) || amount > MAX_RENT_AMOUNT) {
+        setError(t("modals.people.tenants.errors.chargeAmount"));
+        return;
+      }
+      const next = addTenantCharge(ledger.tenant, {
+        id: generateUUID(),
+        date: draftDate.trim(),
+        amount,
+        note: draftNote,
+        createdAt: new Date().toISOString(),
+      });
+      if (!next) {
+        // Amount is valid, so what is left is the date (or the cap).
+        setError(t("modals.people.tenants.errors.dateFormat"));
+        return;
+      }
+      const list = upsertTenant(tenants, next);
+      if (!list) return;
+      setBusy(true);
+      setError(null);
+      try {
+        if (await saveTenants(list)) {
+          setChargeFor(null);
+          triggerHaptic("success");
+        }
+      } catch (err) {
+        triggerHaptic("error");
+        setError(describeError(err, t("modals.people.tenants.errors.save")));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, draftAmount, draftDate, draftNote, saveTenants, t, tenants]
+  );
+
+  const handleRemoveCharge = useCallback(
+    async (ledger: TenantLedger, chargeId: string) => {
+      if (busy) return;
+      const list = upsertTenant(tenants, removeTenantCharge(ledger.tenant, chargeId));
+      if (!list) return;
+      setBusy(true);
+      setError(null);
+      try {
+        if (await saveTenants(list)) triggerHaptic("selection");
+      } catch (err) {
+        setError(describeError(err, t("modals.people.tenants.errors.save")));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, saveTenants, t, tenants]
+  );
 
   const handleSavePayment = useCallback(
     async (ledger: TenantLedger) => {
@@ -502,6 +587,53 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
           </View>
         ) : null}
 
+        {ledger.charges.length > 0 ? (
+          <>
+            <Text style={[styles.label, styles.paymentsHeader]}>
+              {t("modals.people.tenants.chargesHeader")}
+            </Text>
+            {ledger.charges
+              .slice()
+              .reverse()
+              .map((line) => (
+                <View key={line.charge.id} style={styles.historyRow}>
+                  <Text style={[styles.historyMonth, styles.chargeLabel]} numberOfLines={2}>
+                    {formatDayLabel(line.charge.date)} ·{" "}
+                    {line.charge.note ?? t("modals.people.tenants.chargeFallback")}
+                  </Text>
+                  <View style={styles.chargeRight}>
+                    <Text
+                      style={[
+                        styles.historyStatus,
+                        { color: line.status === "paid" ? colors.success : colors.danger },
+                      ]}
+                    >
+                      {line.status === "paid"
+                        ? t("modals.people.tenants.monthPaid", {
+                            rent: formatCurrency(line.charge.amount),
+                          })
+                        : line.status === "partial"
+                          ? t("modals.people.tenants.monthPartial", {
+                              paid: formatCurrency(line.paid),
+                              owed: formatCurrency(line.outstanding),
+                            })
+                          : t("modals.people.tenants.monthUnpaid", {
+                              owed: formatCurrency(line.outstanding),
+                            })}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => void handleRemoveCharge(ledger, line.charge.id)}
+                      accessibilityRole="button"
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.linkDanger}>{t("common.remove")}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+          </>
+        ) : null}
+
         <Text style={[styles.label, styles.paymentsHeader]}>
           {t("modals.people.tenants.paymentsHeader")}
         </Text>
@@ -525,6 +657,7 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
   const renderTenant = (ledger: TenantLedger) => {
     const { tenant } = ledger;
     const paying = paymentFor === tenant.id;
+    const charging = chargeFor === tenant.id;
     const showHistory = historyFor === tenant.id;
     return (
       <View key={tenant.id} style={styles.tenantCard}>
@@ -580,6 +713,15 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
             })}
           >
             <Text style={styles.link}>{t("modals.people.tenants.logPayment")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => (charging ? setChargeFor(null) : openCharge(ledger))}
+            accessibilityRole="button"
+            accessibilityLabel={t("modals.people.tenants.addChargeA11y", {
+              name: tenant.name,
+            })}
+          >
+            <Text style={styles.link}>{t("modals.people.tenants.addCharge")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setHistoryFor(showHistory ? null : tenant.id)}
@@ -649,6 +791,61 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
           </View>
         ) : null}
 
+        {charging ? (
+          <View style={styles.paymentForm}>
+            <Text style={styles.label}>{t("modals.people.tenants.charge.noteLabel")}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t("modals.people.tenants.charge.notePlaceholder")}
+              placeholderTextColor={colors.textMuted}
+              value={draftNote}
+              onChangeText={setDraftNote}
+              maxLength={MAX_TENANT_CHARGE_NOTE_LENGTH}
+              selectTextOnFocus
+            />
+            <Text style={styles.label}>{t("modals.people.tenants.charge.amountLabel")}</Text>
+            <TextInput
+              style={styles.input}
+              value={draftAmount}
+              onChangeText={(text) => {
+                setDraftAmount(text);
+                setError(null);
+              }}
+              keyboardType="decimal-pad"
+            />
+            <Text style={styles.label}>{t("modals.people.tenants.payment.dateLabel")}</Text>
+            <TextInput
+              style={styles.input}
+              value={draftDate}
+              onChangeText={(text) => {
+                setDraftDate(text);
+                setError(null);
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={10}
+            />
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => setChargeFor(null)}
+              >
+                <Text style={styles.secondaryText}>{t("common.cancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, busy && styles.disabled]}
+                onPress={() => void handleSaveCharge(ledger)}
+                disabled={busy}
+              >
+                <Text style={styles.primaryText}>
+                  {t("modals.people.tenants.charge.save")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
         {showHistory ? renderHistory(ledger) : null}
         {form?.id === tenant.id ? renderForm() : null}
       </View>
@@ -687,7 +884,7 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
       )}
 
       {/* An error with no form open (a failed remove) still has to show. */}
-      {error && !form && !paymentFor ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error && !form && !paymentFor && !chargeFor ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {roll.ledgers.map(renderTenant)}
 
@@ -884,6 +1081,8 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       textAlign: "right",
     },
     paymentsHeader: { marginTop: tokens.gapSm },
+    chargeLabel: { flex: 1 },
+    chargeRight: { alignItems: "flex-end", gap: 2, flexShrink: 1 },
   });
 };
 

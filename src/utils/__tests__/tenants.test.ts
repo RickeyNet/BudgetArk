@@ -1,4 +1,6 @@
 import {
+  addTenantCharge,
+  removeTenantCharge,
   buildRentRoll,
   buildTenant,
   buildTenantLedger,
@@ -361,5 +363,84 @@ describe("resolveTenantId", () => {
     expect(resolveTenantId("gone", business, { type: "income" })).toBeUndefined();
     expect(resolveTenantId("t1", undefined, { type: "income" })).toBeUndefined();
     expect(resolveTenantId(null, business, { type: "income" })).toBeUndefined();
+  });
+});
+
+describe("late fees and one-off charges", () => {
+  const charge = (over: Partial<NonNullable<Tenant["charges"]>[number]> = {}) => ({
+    id: "c1",
+    date: "2026-01-10",
+    amount: 50,
+    note: "Late fee",
+    createdAt: "2026-01-10T00:00:00.000Z",
+    ...over,
+  });
+
+  it("adds a charge sorted by date and refuses bad input", () => {
+    const withFee = addTenantCharge(tenant(), charge({ note: "  Late   fee " }));
+    expect(withFee?.charges).toEqual([charge()]);
+    const two = addTenantCharge(withFee as Tenant, charge({ id: "c0", date: "2026-01-02", note: undefined }));
+    expect(two?.charges?.map((c) => c.id)).toEqual(["c0", "c1"]);
+    expect(two?.charges?.[0]).not.toHaveProperty("note");
+    expect(addTenantCharge(tenant(), charge({ amount: 0 }))).toBeNull();
+    expect(addTenantCharge(tenant(), charge({ date: "10/01/2026" }))).toBeNull();
+    expect(addTenantCharge(withFee as Tenant, charge())).toBeNull();
+  });
+
+  it("removes a charge and drops the empty list", () => {
+    const withFee = tenant({ charges: [charge()] });
+    expect(removeTenantCharge(withFee, "c1")).not.toHaveProperty("charges");
+    expect(removeTenantCharge(withFee, "nope")).toBe(withFee);
+  });
+
+  it("validates charges at the trust boundary and keeps them through an edit", () => {
+    expect(isValidTenant(tenant({ charges: [charge()] }))).toBe(true);
+    expect(isValidTenant(tenant({ charges: [charge({ amount: -5 })] }))).toBe(false);
+    expect(isValidTenant(tenant({ charges: [charge({ date: "soon" })] }))).toBe(false);
+    const rebuilt = buildTenant({
+      id: "t1",
+      name: "Sam",
+      rents: [{ from: "2026-01", amount: 1000 }],
+      charges: [charge()],
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(rebuilt?.charges).toEqual([charge()]);
+  });
+
+  it("adds a charge to what the tenant owes", () => {
+    const ledger = buildTenantLedger(
+      tenant({ charges: [charge()] }),
+      "house",
+      [payment()],
+      day(2026, 1, 20)
+    );
+    expect(ledger).toMatchObject({ charged: 1000, extraCharged: 50, outstanding: 50 });
+    expect(ledger.months[0].status).toBe("paid");
+    expect(ledger.charges[0]).toMatchObject({ paid: 0, outstanding: 50, status: "unpaid" });
+  });
+
+  it("pays rent and charges in the order they fell due", () => {
+    // Jan rent (1st), late fee (Jan 10), Feb rent (1st): 1030 covers Jan,
+    // 30 of the fee, nothing of February.
+    const ledger = buildTenantLedger(
+      tenant({ charges: [charge()] }),
+      "house",
+      [payment({ amount: 1030 })],
+      day(2026, 2, 5)
+    );
+    expect(ledger.months.map((m) => m.status)).toEqual(["paid", "unpaid"]);
+    expect(ledger.charges[0]).toMatchObject({ paid: 30, outstanding: 20, status: "partial" });
+    expect(ledger.outstanding).toBe(1020);
+  });
+
+  it("does not count a charge dated in the future", () => {
+    const ledger = buildTenantLedger(
+      tenant({ charges: [charge({ date: "2026-03-01" })] }),
+      "house",
+      [payment()],
+      day(2026, 1, 20)
+    );
+    expect(ledger.charges).toEqual([]);
+    expect(ledger.outstanding).toBe(0);
   });
 });

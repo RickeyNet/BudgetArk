@@ -14,15 +14,24 @@
  * has not arrived yet. Rent owed is therefore never an expense and never
  * counts as income until a payment is actually logged.
  *
- * Payments are applied oldest month first (after any opening balance), so
- * the month-by-month view shows which months are paid, part paid or
- * unpaid. Nothing here touches storage or React. Ids are supplied by
+ * Late fees and one-off charges (`Tenant.charges`) are extra amounts owed
+ * from their date. Payments are applied oldest item first (after any
+ * opening balance) across rent months and charges alike, so the record
+ * shows which months and charges are paid, part paid or unpaid. Nothing here touches storage or React. Ids are supplied by
  * callers - this module stays uuid-free for Jest.
  */
 
-import type { BudgetEntry, Business, RentTerm, Tenant } from "../types";
+import type {
+  BudgetEntry,
+  Business,
+  RentTerm,
+  Tenant,
+  TenantCharge,
+} from "../types";
 import {
   MAX_RENT_TERMS,
+  MAX_TENANT_CHARGE_NOTE_LENGTH,
+  MAX_TENANT_CHARGES,
   MAX_TENANT_NAME_LENGTH,
   MAX_TENANTS_PER_BUSINESS,
 } from "../types";
@@ -49,6 +58,30 @@ const isMoney = (value: unknown, allowZero: boolean): value is number =>
 const isRentTerm = (value: unknown): value is RentTerm =>
   isObject(value) && isMonthKey(value.from) && isMoney(value.amount, true);
 
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const isDateKey = (value: unknown): value is string =>
+  typeof value === "string" &&
+  DATE_KEY_RE.test(value) &&
+  Number.isFinite(Date.parse(value));
+
+const isTenantCharge = (value: unknown): value is TenantCharge => {
+  if (!isObject(value)) return false;
+  const { id, date, amount, note, createdAt } = value;
+  if (typeof id !== "string" || id.length === 0 || id.length > 120) return false;
+  if (!isDateKey(date) || !isMoney(amount, false)) return false;
+  if (
+    note !== undefined &&
+    (typeof note !== "string" ||
+      note.length === 0 ||
+      note.length > MAX_TENANT_CHARGE_NOTE_LENGTH ||
+      sanitizeTextInput(note) !== note)
+  ) {
+    return false;
+  }
+  return typeof createdAt === "string" && Number.isFinite(Date.parse(createdAt));
+};
+
 /**
  * Trust-boundary shape check for one stored/synced/imported tenant.
  * Fail-closed: a tenant that does not validate is ignored by every reader
@@ -56,7 +89,7 @@ const isRentTerm = (value: unknown): value is RentTerm =>
  */
 export const isValidTenant = (value: unknown): value is Tenant => {
   if (!isObject(value)) return false;
-  const { id, name, rents, dueDay, openingBalance, endMonth, createdAt } = value;
+  const { id, name, rents, dueDay, openingBalance, endMonth, charges, createdAt } = value;
   if (typeof id !== "string" || id.length === 0 || id.length > 120) return false;
   if (
     typeof name !== "string" ||
@@ -78,6 +111,16 @@ export const isValidTenant = (value: unknown): value is Tenant => {
   }
   if (openingBalance !== undefined && !isMoney(openingBalance, true)) return false;
   if (endMonth !== undefined && !isMonthKey(endMonth)) return false;
+  if (
+    charges !== undefined &&
+    !(
+      Array.isArray(charges) &&
+      charges.length <= MAX_TENANT_CHARGES &&
+      charges.every(isTenantCharge)
+    )
+  ) {
+    return false;
+  }
   return typeof createdAt === "string" && Number.isFinite(Date.parse(createdAt));
 };
 
@@ -128,6 +171,8 @@ export interface TenantDraft {
   dueDay?: number;
   openingBalance?: number;
   endMonth?: string;
+  /** Carried through unchanged - charges are edited with the helpers below. */
+  charges?: readonly TenantCharge[];
   createdAt: string;
 }
 
@@ -150,7 +195,67 @@ export const buildTenant = (draft: TenantDraft): Tenant | null => {
     if (!isMonthKey(draft.endMonth) || draft.endMonth < rents[0].from) return null;
     tenant.endMonth = draft.endMonth;
   }
+  if (draft.charges && draft.charges.length > 0) tenant.charges = [...draft.charges];
   return isValidTenant(tenant) ? tenant : null;
+};
+
+export const normalizeChargeNote = (raw: string | undefined): string | undefined => {
+  if (typeof raw !== "string") return undefined;
+  const cleaned = sanitizeTextInput(raw)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_TENANT_CHARGE_NOTE_LENGTH)
+    .trim();
+  return cleaned.length > 0 ? cleaned : undefined;
+};
+
+export interface NewTenantChargeInput {
+  id: string;
+  date: string;
+  amount: number;
+  note?: string;
+  createdAt: string;
+}
+
+/**
+ * Add a late fee / one-off charge and return the patched tenant, or null
+ * when it can't be recorded: a non-positive or oversized amount, a date
+ * that is not YYYY-MM-DD, a duplicate id, or the per-tenant cap. Charges
+ * stay sorted oldest first.
+ */
+export const addTenantCharge = (
+  tenant: Tenant,
+  input: NewTenantChargeInput
+): Tenant | null => {
+  const amount = roundToCents(input.amount);
+  if (!isMoney(amount, false) || !isDateKey(input.date)) return null;
+  const existing = tenant.charges ?? [];
+  if (existing.length >= MAX_TENANT_CHARGES) return null;
+  if (existing.some((charge) => charge.id === input.id)) return null;
+  const note = normalizeChargeNote(input.note);
+  const charge: TenantCharge = {
+    id: input.id,
+    date: input.date,
+    amount,
+    ...(note ? { note } : {}),
+    createdAt: input.createdAt,
+  };
+  const next: Tenant = {
+    ...tenant,
+    charges: [...existing, charge].sort((a, b) => a.date.localeCompare(b.date)),
+  };
+  return isValidTenant(next) ? next : null;
+};
+
+/** Drop one charge; returns the same tenant when the id is unknown. */
+export const removeTenantCharge = (tenant: Tenant, chargeId: string): Tenant => {
+  const existing = tenant.charges ?? [];
+  if (!existing.some((charge) => charge.id === chargeId)) return tenant;
+  const remaining = existing.filter((charge) => charge.id !== chargeId);
+  const next: Tenant = { ...tenant };
+  if (remaining.length > 0) next.charges = remaining;
+  else delete next.charges;
+  return next;
 };
 
 /** Insert or replace by id; null when the per-business cap is hit. */
@@ -248,6 +353,14 @@ export interface RentMonth {
   status: RentMonthStatus;
 }
 
+/** One late fee / one-off charge with what has been paid toward it. */
+export interface ChargeLine {
+  charge: TenantCharge;
+  paid: number;
+  outstanding: number;
+  status: RentMonthStatus;
+}
+
 export interface TenantLedger {
   tenant: Tenant;
   /** Rent charged for every month that has fallen due (excludes the opening balance). */
@@ -265,6 +378,10 @@ export interface TenantLedger {
   months: RentMonth[];
   /** Months not fully paid. */
   unpaidMonthCount: number;
+  /** Late fees and one-off charges dated today or earlier, oldest first. */
+  charges: ChargeLine[];
+  /** Sum of those charges (not part of `charged`). */
+  extraCharged: number;
   /** Payment entries, newest first. */
   payments: BudgetEntry[];
   /** The tenant's `endMonth` has passed - no further rent is charged. */
@@ -296,29 +413,67 @@ export const buildTenantLedger = (
   const openingPaid = Math.min(openingBalance, remaining);
   remaining = roundToCents(remaining - openingPaid);
 
+  // Everything owed, in the order it fell due: each month on its due day
+  // and each charge on its date (a month wins a same-day tie). Payments
+  // are poured over that timeline oldest first.
   const months: RentMonth[] = [];
+  const charges: ChargeLine[] = [];
+  const timeline: { due: string; order: number; line: RentMonth | ChargeLine; amount: number }[] = [];
   let charged = 0;
   let cursor = tenant.rents[0].from;
   for (let i = 0; cursor <= lastCharged && i < MAX_LEDGER_MONTHS; i += 1) {
     const rent = rentForMonth(tenant, cursor);
     if (rent > 0) {
-      const applied = Math.min(rent, remaining);
-      remaining = roundToCents(remaining - applied);
-      const outstanding = roundToCents(rent - applied);
       charged += rent;
-      months.push({
+      const month: RentMonth = {
         monthKey: cursor,
         rent,
-        paid: roundToCents(applied),
-        outstanding,
-        status: outstanding <= 0 ? "paid" : applied > 0 ? "partial" : "unpaid",
+        paid: 0,
+        outstanding: rent,
+        status: "unpaid",
+      };
+      months.push(month);
+      const dueDay = Math.min(tenant.dueDay ?? 1, daysInMonth(cursor));
+      timeline.push({
+        due: `${cursor}-${String(dueDay).padStart(2, "0")}`,
+        order: 0,
+        line: month,
+        amount: rent,
       });
     }
     cursor = nextMonthKey(cursor);
   }
   charged = roundToCents(charged);
 
-  const balance = roundToCents(openingBalance + charged - paid);
+  // A charge dated in the future is not owed yet.
+  const todayKey = `${monthKeyOf(today)}-${String(today.getDate()).padStart(2, "0")}`;
+  let extraCharged = 0;
+  for (const charge of tenant.charges ?? []) {
+    if (charge.date > todayKey) continue;
+    extraCharged += charge.amount;
+    const line: ChargeLine = {
+      charge,
+      paid: 0,
+      outstanding: charge.amount,
+      status: "unpaid",
+    };
+    charges.push(line);
+    timeline.push({ due: charge.date, order: 1, line, amount: charge.amount });
+  }
+  extraCharged = roundToCents(extraCharged);
+  charges.sort((a, b) => a.charge.date.localeCompare(b.charge.date));
+
+  timeline.sort((a, b) => a.due.localeCompare(b.due) || a.order - b.order);
+  for (const item of timeline) {
+    const applied = Math.min(item.amount, remaining);
+    remaining = roundToCents(remaining - applied);
+    item.line.paid = roundToCents(applied);
+    item.line.outstanding = roundToCents(item.amount - applied);
+    item.line.status =
+      item.line.outstanding <= 0 ? "paid" : applied > 0 ? "partial" : "unpaid";
+  }
+
+  const balance = roundToCents(openingBalance + charged + extraCharged - paid);
   return {
     tenant,
     charged,
@@ -329,6 +484,8 @@ export const buildTenantLedger = (
     credit: Math.max(0, roundToCents(-balance)),
     months,
     unpaidMonthCount: months.filter((month) => month.status !== "paid").length,
+    charges,
+    extraCharged,
     payments,
     movedOut: tenant.endMonth !== undefined && tenant.endMonth < monthKeyOf(today),
   };

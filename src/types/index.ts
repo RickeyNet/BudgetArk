@@ -265,12 +265,31 @@ export interface Tenant {
   openingBalance?: number;
   /** Last month (YYYY-MM) rent is charged - set when the tenant moves out. */
   endMonth?: string;
+  /**
+   * Extra amounts the tenant owes on top of rent: a late fee, a repair, a
+   * utility bill passed on. Added to the balance from their date and paid
+   * down by the same payments as rent, oldest item first.
+   */
+  charges?: TenantCharge[];
+  createdAt: string;
+}
+
+/** One late fee or one-off charge billed to a tenant. */
+export interface TenantCharge {
+  id: string;
+  /** YYYY-MM-DD the charge was made; it is owed from this day. */
+  date: string;
+  amount: number;
+  /** What it is for ("Late fee", "Window repair"). */
+  note?: string;
   createdAt: string;
 }
 
 export const MAX_TENANTS_PER_BUSINESS = 20;
 export const MAX_TENANT_NAME_LENGTH = 40;
 export const MAX_RENT_TERMS = 60;
+export const MAX_TENANT_CHARGES = 200;
+export const MAX_TENANT_CHARGE_NOTE_LENGTH = 60;
 
 /**
  * A household member (or anyone else) spending can be assigned to via
