@@ -15,7 +15,7 @@ import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { CURRENT_APP_VERSION, RELEASE_NOTES } from "../releaseNotes";
-import { summarizeHighlight } from "../../utils/updateReleaseNotes";
+import { OTA_MESSAGE_MAX, summarizeHighlight, tryParseReleaseNoteFromMessage } from "../../utils/updateReleaseNotes";
 
 const SEMVER_RE = /^\d+\.\d+\.\d+$/;
 
@@ -91,18 +91,29 @@ describe("CURRENT_APP_VERSION", () => {
 // drift between the two, or a top entry the script can't parse, fails here
 // rather than in a user's Update Ready dialog.
 describe("scripts/eas-update-message.mjs", () => {
-  it("stamps the top entry with headline-only highlights", () => {
+  it("stamps the top entry with headline-only highlights that fit the message limit", () => {
     const script = path.join(__dirname, "..", "..", "..", "scripts", "eas-update-message.mjs");
-    const payload = JSON.parse(execFileSync(process.execPath, [script], { encoding: "utf8" })) as {
+    const raw = execFileSync(process.execPath, [script], { encoding: "utf8" });
+    // eas-cli truncates longer messages, which would break the JSON.
+    expect(raw.length).toBeLessThanOrEqual(OTA_MESSAGE_MAX);
+    const payload = JSON.parse(raw) as {
       version: string;
       title: string;
       releasedAt: string;
       highlights: string[];
+      total: number;
     };
     const top = RELEASE_NOTES[0];
     expect(payload.version).toBe(top.version);
     expect(payload.title).toBe(top.title);
     expect(payload.releasedAt).toBe(top.releasedAt);
-    expect(payload.highlights).toEqual(top.highlights.map(summarizeHighlight));
+    // The first headlines, in order - at least the four the dialog lists.
+    expect(payload.highlights.length).toBeGreaterThanOrEqual(Math.min(4, top.highlights.length));
+    expect(payload.highlights).toEqual(
+      top.highlights.map(summarizeHighlight).slice(0, payload.highlights.length)
+    );
+    expect(payload.total).toBe(top.highlights.length);
+    // And the app accepts exactly what the script emits.
+    expect(tryParseReleaseNoteFromMessage(raw)).toEqual(payload);
   });
 });

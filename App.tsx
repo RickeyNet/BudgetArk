@@ -23,6 +23,7 @@ import {
   TouchableOpacity,
   NativeModules,
   Platform,
+  Linking,
 } from "react-native";
 
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -83,7 +84,12 @@ import {
 import { requestArkSetupPrompt } from "./src/storage/arkSetupStorage";
 import { isUpdateSafe } from "./src/utils/versionGuard";
 import { getPrivacyMode } from "./src/storage/privacyStorage";
-import { resolveUpdateInfo, summarizeHighlight } from "./src/utils/updateReleaseNotes";
+import {
+  RELEASE_NOTES_URL,
+  countHiddenHighlights,
+  resolveUpdateInfo,
+  summarizeHighlight,
+} from "./src/utils/updateReleaseNotes";
 import { createUpdateChecker, type UpdateCheckOutcome } from "./src/utils/updateCheck";
 import { UpdateCheckProvider } from "./src/components/UpdateCheckContext";
 
@@ -656,19 +662,13 @@ const AppContent: React.FC = () => {
                       {"\u2022"} {summarizeHighlight(line)}
                     </Text>
                   ))}
-                  {pendingUpdate.releaseNote.highlights.length > 4 ? (
+                  {countHiddenHighlights(pendingUpdate.releaseNote, 4) > 0 ? (
                     <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
                       {t("modals.engage.updateReady.moreInReleaseNotes", {
-                        n: pendingUpdate.releaseNote.highlights.length - 4,
+                        n: countHiddenHighlights(pendingUpdate.releaseNote, 4),
                       })}
                     </Text>
                   ) : null}
-                  {/* Headlines only above - say where the detail lives. Not a
-                      button: this (older) bundle's Release Notes screen
-                      doesn't have the incoming version until it installs. */}
-                  <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
-                    {t("modals.engage.updateReady.fullDetailsAfterInstall")}
-                  </Text>
                 </>
               ) : (
                 <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
@@ -682,6 +682,27 @@ const AppContent: React.FC = () => {
                   })}
                 </Text>
               )}
+              {/* Headlines only above - this is the way to read every change
+                  BEFORE installing. It opens the public changelog in the
+                  browser because this (older) bundle's Release Notes screen
+                  doesn't have the incoming version yet, and the OTA message
+                  is too small to carry the full text (OTA_MESSAGE_MAX). */}
+              <TouchableOpacity
+                style={styles.updateNotesLink}
+                onPress={() => {
+                  void Linking.openURL(RELEASE_NOTES_URL).catch(() => {});
+                }}
+                accessibilityRole="link"
+                accessibilityLabel={t("modals.engage.updateReady.seeFullNotes")}
+                accessibilityHint={t("modals.engage.updateReady.seeFullNotesHint")}
+              >
+                <Text style={[styles.updateNotesLinkText, { color: colors.accent }]}>
+                  {t("modals.engage.updateReady.seeFullNotes")}
+                </Text>
+                <Text style={[styles.updateMeta, { color: colors.textMuted }]}>
+                  {t("modals.engage.updateReady.seeFullNotesHint")}
+                </Text>
+              </TouchableOpacity>
             </ScrollView>
             <View style={styles.dialogActions}>
               <TouchableOpacity
@@ -916,6 +937,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
     marginBottom: 8,
+  },
+  updateNotesLink: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    paddingTop: 10,
+  },
+  updateNotesLinkText: {
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
   },
   dialogActions: {
     gap: 10,

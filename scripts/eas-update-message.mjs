@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * Emit the top RELEASE_NOTES entry as a JSON string suitable for
- * `eas update --message`, with each highlight cut down to its headline. The running (older) bundle parses this payload
- * out of the manifest so the OTA prompt can show highlights for the
- * incoming version even though that version isn't in the user's baked-in
- * RELEASE_NOTES list yet.
+ * `eas update --message`, with each highlight cut down to its headline and
+ * only as many headlines as fit in eas-cli's 1024-character message limit.
+ * The running (older) bundle parses this payload out of the manifest so the
+ * OTA prompt can show highlights for the incoming version even though that
+ * version isn't in the user's baked-in RELEASE_NOTES list yet.
  *
  * Usage (bash / git-bash):
  *   eas update --branch production --message "$(node scripts/eas-update-message.mjs)"
@@ -112,10 +113,21 @@ const summarizeHighlight = (highlight) => {
   return `${head}\u2026`;
 };
 
-const payload = {
-  version,
-  title,
-  releasedAt,
-  highlights: highlights.map(summarizeHighlight),
-};
+// eas-cli cuts --message to 1024 characters, and a cut payload is no longer
+// JSON - the app would show no highlights at all. So stamp the headlines that
+// fit and say how many there are in total (the dialog's "+N more" counts from
+// `total`). Mirror of OTA_MESSAGE_MAX in src/utils/updateReleaseNotes.ts.
+const OTA_MESSAGE_MAX = 1024;
+const payload = { version, title, releasedAt, highlights: [], total: highlights.length };
+for (const headline of highlights.map(summarizeHighlight)) {
+  payload.highlights.push(headline);
+  if (JSON.stringify(payload).length > OTA_MESSAGE_MAX) {
+    payload.highlights.pop();
+    break;
+  }
+}
+if (payload.highlights.length === 0) {
+  console.error(`No highlight fits in the ${OTA_MESSAGE_MAX}-character update message`);
+  process.exit(1);
+}
 process.stdout.write(JSON.stringify(payload));

@@ -2,13 +2,46 @@ import { RELEASE_NOTES, type ReleaseNote } from "../data/releaseNotes";
 
 const SEMVER_REGEX = /\b\d+\.\d+\.\d+\b/;
 
+/**
+ * A release note as the "Update Ready" dialog sees it. `total` is how many
+ * highlights the release really has: the note stamped into an OTA message
+ * only carries the first few (see OTA_MESSAGE_MAX), so the dialog's
+ * "+N more" has to count from this, not from highlights.length.
+ */
+export type UpdateReleaseNote = ReleaseNote & { total?: number };
+
 export type ResolvedUpdateInfo = {
   message: string;
   createdAt?: string;
   runtimeVersion?: string;
   appVersion?: string;
-  releaseNote?: ReleaseNote;
+  releaseNote?: UpdateReleaseNote;
 };
+
+/**
+ * `eas update --message` is cut to 1024 characters by eas-cli ("Update
+ * message exceeds the allowed 1024 character limit. Truncating message...").
+ * A truncated payload is no longer JSON, so the running bundle would show no
+ * highlights at all. scripts/eas-update-message.mjs therefore stamps only as
+ * many headlines as fit under this (releaseNotes.test.ts enforces it), which
+ * is also why the full notes can't travel in the message - the dialog links
+ * to RELEASE_NOTES_URL for those.
+ */
+export const OTA_MESSAGE_MAX = 1024;
+
+/**
+ * The public changelog, opened in the browser from the "Update Ready"
+ * dialog so someone can read every change BEFORE installing (the installed
+ * bundle doesn't contain the incoming version's notes). Deliberately a link
+ * the user taps, not something the app fetches: an in-app download would be
+ * a new network destination (CLAUDE.md egress allowlist).
+ */
+export const RELEASE_NOTES_URL =
+  "https://github.com/RickeyNet/BudgetArk/blob/master/RELEASE_NOTES.md";
+
+/** How many highlights the dialog isn't showing, given it lists `shown`. */
+export const countHiddenHighlights = (note: UpdateReleaseNote, shown: number): number =>
+  Math.max(0, Math.max(note.total ?? 0, note.highlights.length) - shown);
 
 export const normalizeVersionString = (value: unknown): string | undefined => {
   if (typeof value !== "string") return undefined;
@@ -65,7 +98,7 @@ export const summarizeHighlight = (highlight: string): string => {
  */
 export const tryParseReleaseNoteFromMessage = (
   message: string
-): ReleaseNote | undefined => {
+): UpdateReleaseNote | undefined => {
   const trimmed = message.trim();
   if (!trimmed.startsWith("{")) return undefined;
   try {
@@ -79,7 +112,13 @@ export const tryParseReleaseNoteFromMessage = (
       Array.isArray((parsed as ReleaseNote).highlights) &&
       (parsed as ReleaseNote).highlights.every((h) => typeof h === "string")
     ) {
-      return parsed as ReleaseNote;
+      // Optional, but if present it must be a sane count - reject rather
+      // than guess what a malformed payload meant.
+      const total = (parsed as UpdateReleaseNote).total;
+      if (total !== undefined && !(Number.isInteger(total) && total >= 0)) {
+        return undefined;
+      }
+      return parsed as UpdateReleaseNote;
     }
   } catch {
     // not JSON - treat as plain-string message

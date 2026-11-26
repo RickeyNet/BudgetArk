@@ -5,6 +5,7 @@ import {
   resolveUpdateInfo,
   summarizeHighlight,
   HIGHLIGHT_SUMMARY_MAX,
+  countHiddenHighlights,
 } from "../updateReleaseNotes";
 
 // Controlled, newest-first release list (matches the real data's ordering, on
@@ -78,6 +79,42 @@ describe("tryParseReleaseNoteFromMessage", () => {
   it("rejects JSON whose highlights are not all strings", () => {
     const bad = JSON.stringify(note({ highlights: ["ok", 5] }));
     expect(tryParseReleaseNoteFromMessage(bad)).toBeUndefined();
+  });
+});
+
+describe("tryParseReleaseNoteFromMessage total", () => {
+  it("keeps a valid total", () => {
+    const stamped = { ...note(), total: 30 };
+    expect(tryParseReleaseNoteFromMessage(JSON.stringify(stamped))).toEqual(stamped);
+  });
+
+  it("rejects a malformed total instead of guessing", () => {
+    for (const total of ["30", -1, 1.5, null]) {
+      const bad = JSON.stringify({ ...note(), total });
+      expect(tryParseReleaseNoteFromMessage(bad)).toBeUndefined();
+    }
+  });
+
+  it("rejects a message eas-cli truncated mid-JSON", () => {
+    const cut = `${JSON.stringify(note()).slice(0, 40)}...`;
+    expect(tryParseReleaseNoteFromMessage(cut)).toBeUndefined();
+  });
+});
+
+describe("countHiddenHighlights", () => {
+  const base = { version: "3.0.0", title: "x", releasedAt: "2026-03-01" };
+
+  it("counts from the stamped total, not the trimmed list", () => {
+    expect(countHiddenHighlights({ ...base, highlights: ["a", "b", "c", "d", "e"], total: 30 }, 4)).toBe(26);
+  });
+
+  it("falls back to the list length without a total", () => {
+    expect(countHiddenHighlights({ ...base, highlights: ["a", "b", "c", "d", "e"] }, 4)).toBe(1);
+  });
+
+  it("never goes negative, and ignores a total smaller than the list", () => {
+    expect(countHiddenHighlights({ ...base, highlights: ["a"] }, 4)).toBe(0);
+    expect(countHiddenHighlights({ ...base, highlights: ["a", "b", "c", "d", "e"], total: 2 }, 4)).toBe(1);
   });
 });
 
