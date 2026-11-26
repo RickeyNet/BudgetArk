@@ -22,6 +22,7 @@ import {
   generatePayoffSchedule,
 } from "./calculations";
 import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
+import { spendingAmount } from "./refunds";
 
 /* ── Loan schedule CSV export ── */
 
@@ -359,7 +360,7 @@ export const calcAvgMonthlyExpenses = (
     if (month.businesses.length > 0) monthsTracked.add(mk);
     for (const entry of month.entries) {
       monthsTracked.add(mk);
-      if (entry.type === "expense") monthTotals[mk] += entry.amount;
+      monthTotals[mk] += spendingAmount(entry);
     }
   }
 

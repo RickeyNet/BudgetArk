@@ -116,6 +116,14 @@ export interface ApproveOptions {
    */
   lentTo?: string | null;
   /**
+   * The deposit is money back on a purchase, not income (see
+   * BudgetEntry.refund / utils/refunds): `category` is then the spending
+   * category it offsets. Deposits only - ignored on an outflow. A refund
+   * is never filed against an earner's income and never saves a merchant
+   * rule (the rule's direction would be wrong for the merchant's charges).
+   */
+  refund?: boolean;
+  /**
    * Save an auto-approve merchant rule: future fetches turn matching
    * transactions straight into entries with this category - plus the
    * entered name (when it differs from the bank's text), business, and
@@ -186,8 +194,9 @@ export const approvePendingTransaction = async (
       : opts.businessId ?? item.suggestedBusinessId;
   // The bill (outflow) or earner's recurring income (deposit) this stands in
   // for, re-validated against the live entries including the type match.
+  const refund = type === "income" && opts.refund === true;
   const fulfilled = await resolveFulfillment(
-    opts.fulfillsRecurringId === null
+    refund || opts.fulfillsRecurringId === null
       ? undefined
       : opts.fulfillsRecurringId ?? item.suggestedRecurringId,
     item.postedAt,
@@ -228,6 +237,7 @@ export const approvePendingTransaction = async (
     ...people,
     fulfillsRecurringId,
     lentTo,
+    ...(refund ? { refund: true } : {}),
   };
 
   await addBudgetEntry(entry);
@@ -236,7 +246,7 @@ export const approvePendingTransaction = async (
   });
   await removePendingTransaction(item.id);
 
-  if (opts.rememberRule && item.merchant) {
+  if (opts.rememberRule && item.merchant && !refund) {
     // Only remember a rename when the saved name actually differs from the
     // bank's default text - an untouched name keeps future imports raw.
     // Compared in sanitized form on both sides (see renameForRule): the
@@ -714,6 +724,10 @@ export const autoApproveInboxByRules = async (): Promise<number> => {
       businessId: suggestedBusinessFor(rule, item.suggestedType) ?? null,
       personIds: entryPersonIds(rule),
       fulfillsRecurringId: rule.recurringEntryId ?? null,
+      // A deposit from a merchant the user SPENDS at is money coming back:
+      // file it as a refund in the rule's spending category instead of as
+      // income in it (utils/refunds).
+      refund: rule.type === "expense" && item.suggestedType === "income",
     });
     if (entry) {
       await touchRuleUsage(rule.id);

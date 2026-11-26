@@ -21,6 +21,7 @@ import { isMonthKey, isMonthStartBalanceRecord } from "./recordValidators";
 import { personalMonth } from "./businessProfit";
 import { paymentMonthKey } from "./debtDueCalendar";
 import { buildDebtPaymentPlanForMonth } from "./debtPaymentPlan";
+import { countsAsSpending, isEarnedIncome, spendingAmount } from "./refunds";
 
 export type MonthStartBalanceMap = Record<string, MonthStartBalance>;
 
@@ -123,7 +124,7 @@ export const computeMonthReconciliationDelta = (input: {
   const prevIncome =
     prevMonth.businessProfit +
     prevEntries
-      .filter((e) => e.type === "income")
+      .filter(isEarnedIncome)
       .reduce((sum, e) => sum + e.amount, 0);
   const liveDebtIds = new Set(input.debts.map((d) => d.id));
   const prevPayments = input.payments.filter(
@@ -137,8 +138,8 @@ export const computeMonthReconciliationDelta = (input: {
   ).reduce((sum, line) => sum + line.amount, 0);
   const prevExpenses =
     prevEntries
-      .filter((e) => e.type === "expense")
-      .reduce((sum, e) => sum + e.amount, 0) + prevDebtTotal;
+      .filter(countsAsSpending)
+      .reduce((sum, e) => sum + spendingAmount(e), 0) + prevDebtTotal;
 
   return computeReconciliation({
     previousBalance: previous.balance,

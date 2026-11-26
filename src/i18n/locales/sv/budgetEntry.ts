@@ -134,6 +134,10 @@ export const budgetEntry: Localized<typeof en> = {
     hint: "Synkas aldrig till din partners enhet. Räknas fortfarande i din budget och följer med i dina egna säkerhetskopior och exporter.",
     alreadySyncedNote: " Om den här posten har synkats tidigare behåller din partner kopian de redan har.",
   },
+  refund: {
+    label: "↩ Det här är en återbetalning",
+    hint: "Pengar tillbaka för ett köp. Välj utgiftskategorin de kom från: det sänker kategorins utgifter den här månaden och räknas inte som inkomst.",
+  },
   loan: {
     label: "UTLÅNAT TILL NÅGON? (VALFRITT)",
     hint: "Pengar du väntar dig tillbaka. Ange vem som har dem så visas posten under Profil → Personer → Att få tillbaka, där du loggar vad de betalar tillbaka. Den räknas ändå som utgift den här månaden.",

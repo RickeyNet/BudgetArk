@@ -250,6 +250,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   );
   /** "Lent to someone?" - free text, "" = not a loan (see BudgetEntry.lentTo). */
   const [draftLentTo, setDraftLentTo] = useState("");
+  /** Deposit is money back on a purchase, not income (BudgetEntry.refund). */
+  const [draftRefund, setDraftRefund] = useState(false);
   const [rememberRule, setRememberRule] = useState(false);
   // "Applies to bill", "Add to a purchase plan" and "Lent to someone" fold
   // away by default so the editor stays short; the picked bill/debt or name
@@ -416,13 +418,22 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             : item.suggestedRecurringId,
       );
       setDraftLentTo("");
+      // A deposit from a merchant the user has a spending rule for is
+      // almost certainly money back, so the refund switch starts on.
+      setDraftRefund(
+        item.suggestedType === "income" &&
+          !!item.merchant &&
+          rules.some(
+            (rule) => rule.merchantKey === item.merchant && rule.type === "expense",
+          ),
+      );
       setRememberRule(false);
       setShowBillSection(false);
       setShowPlanSection(false);
       setShowLentSection(false);
       return item.id;
     });
-  }, []);
+  }, [rules]);
 
   // A deposit filed against a business's recurring income (a retainer)
   // belongs to that business: prefill the tag so the estimate it replaces
@@ -450,6 +461,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       personIds: string[],
       recurringId: string | undefined,
       lentTo: string,
+      refund = false,
     ) => {
       setBusyId(item.id);
       setActionError(null);
@@ -465,11 +477,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           personIds: personIds.length > 0 ? personIds : null,
           fulfillsRecurringId: recurringId ?? null,
           lentTo: lentTo.trim() || null,
+          refund,
           rememberRule: remember,
         });
         // "Always" just created an auto-approve rule - sweep the rest of
         // the inbox so matching items are approved now, not next sync.
-        if (remember && item.merchant) {
+        if (remember && item.merchant && !refund) {
           await applyRulesToInbox();
           void getMerchantRules()
             .then(setRules)
@@ -858,6 +871,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     const expanded = expandedId === item.id;
     const busy = busyId === item.id;
     const isExpense = item.amount < 0;
+    // Refund switch (deposits only). While on, the row is not a paycheck
+    // and saves no rule, so those two controls are hidden and ignored.
+    const isRefund = expanded && !isExpense && draftRefund;
+    const remembering = rememberRule && !isRefund;
     // Statement-file rows have no ExternalAccountLink to name them; their
     // label is carried in the account id (utils/bankCsvImport).
     const accountName =
@@ -1091,6 +1108,28 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 </TouchableOpacity>
               </View>
             ) : null}
+            {!isExpense ? (
+              <>
+                <TouchableOpacity
+                  style={styles.rememberRow}
+                  onPress={() => setDraftRefund((prev) => !prev)}
+                  activeOpacity={0.7}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: draftRefund }}
+                  accessibilityLabel={t("budget.inbox.form.refundLabel")}
+                >
+                  <View style={[styles.checkbox, draftRefund && styles.checkboxActive]}>
+                    {draftRefund ? <Text style={styles.checkboxCheck}>✓</Text> : null}
+                  </View>
+                  <Text style={styles.rememberLabel}>
+                    {t("budget.inbox.form.refundLabel")}
+                  </Text>
+                </TouchableOpacity>
+                {draftRefund ? (
+                  <Text style={styles.planHint}>{t("budget.inbox.form.refundHint")}</Text>
+                ) : null}
+              </>
+            ) : null}
             {item.suggestedType === "expense" &&
             (people.length > 0 || draftPersonIds.length > 0) ? (
               <>
@@ -1118,7 +1157,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   />
               </>
             ) : null}
-            {applyToOptions.length > 0 ? (
+            {applyToOptions.length > 0 && !isRefund ? (
               <>
                 <TouchableOpacity
                   style={styles.foldHeader}
@@ -1250,7 +1289,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 ) : null}
               </>
             ) : null}
-            {item.merchant ? (
+            {item.merchant && !isRefund ? (
               <TouchableOpacity
                 style={styles.rememberRow}
                 onPress={() => setRememberRule((prev) => !prev)}
@@ -1269,11 +1308,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.skipButton, busy && styles.buttonDisabled]}
-                onPress={() => void handleSkip(item, rememberRule)}
+                onPress={() => void handleSkip(item, remembering)}
                 disabled={busy}
               >
                 <Text style={styles.skipButtonText}>
-                  {rememberRule && item.merchant
+                  {remembering && item.merchant
                     ? t("budget.inbox.actions.alwaysSkip")
                     : t("budget.inbox.actions.skip")}
                 </Text>
@@ -1286,12 +1325,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     : handleApprove(
                         item,
                         draftCategory,
-                        rememberRule,
+                        remembering,
                         draftName,
                         draftBusinessId,
                         draftPersonIds,
-                        draftRecurringId,
+                        isRefund ? undefined : draftRecurringId,
                         draftLentTo,
+                        isRefund,
                       ))
                 }
                 disabled={busy}
@@ -1303,7 +1343,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       ? rememberRule && item.merchant
                         ? t("budget.inbox.actions.alwaysLogPayment")
                         : t("budget.inbox.actions.logPayment")
-                      : rememberRule && item.merchant
+                      : remembering && item.merchant
                         ? t("budget.inbox.actions.alwaysApprove")
                         : t("budget.inbox.actions.approve")}
                 </Text>

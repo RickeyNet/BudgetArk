@@ -522,6 +522,11 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
   // private. Same truthy-cell parsing as Recurring.
   const isPrivate = parseBoolean(get(row, "Private")) || undefined;
 
+  // Refund mark. Only meaningful on one-off income (see utils/refunds);
+  // anything else is dropped so the stored shape matches what the app writes.
+  const refund =
+    (type === "income" && !recurring && parseBoolean(get(row, "Refund"))) || undefined;
+
   // Bill fulfilment link. Must round-trip: a restore that dropped it would
   // show the bill's estimate next to the actual charge and double-count it.
   // Only meaningful on one-off expenses; anything else is dropped so the
@@ -599,6 +604,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     retirementContribution,
     taxSetAsideRate,
     isPrivate,
+    refund,
     fulfillsRecurringId,
     payFrequency,
     lentTo,

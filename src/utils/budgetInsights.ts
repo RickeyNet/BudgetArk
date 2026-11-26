@@ -4,6 +4,7 @@ import { t } from "../i18n/translate";
 import { entriesForMonth } from "./billFulfillment";
 import { personalMonth } from "./businessProfit";
 import { getMonthKeyOffset } from "./budgetMonths";
+import { isEarnedIncome, spendingAmount } from "./refunds";
 
 
 /* ─── Types ─── */
@@ -89,12 +90,13 @@ const buildMonthSummary = (
   let totalExpenses = 0;
 
   for (const entry of monthly) {
-    if (entry.type === "income") {
+    if (isEarnedIncome(entry)) {
       totalIncome += entry.amount;
     } else {
-      totalExpenses += entry.amount;
-      byCategory[entry.category] =
-        (byCategory[entry.category] ?? 0) + entry.amount;
+      // A refund lands here as negative spending (utils/refunds).
+      const spent = spendingAmount(entry);
+      totalExpenses += spent;
+      byCategory[entry.category] = (byCategory[entry.category] ?? 0) + spent;
     }
   }
 

@@ -15,6 +15,7 @@ import type { BudgetEntry, CategoryBudgetLimit, CategoryName } from "../types";
 import { personalEntriesForMonth } from "./businessProfit";
 import { parseMoneyInput } from "./parseMoneyInput";
 import { shiftMonthKey } from "./recurringBillDetection";
+import { countsAsSpending, spendingAmount } from "./refunds";
 
 /** Month key -> that month's limits (tombstones included); the shape budgetStorage persists. */
 export type BudgetLimitHistory = Record<string, CategoryBudgetLimit[]>;
@@ -63,8 +64,8 @@ const expenseSpendByCategory = (
   // Limits are household limits: an income-tracking business's bills are
   // not counted against them (utils/businessProfit).
   for (const entry of personalEntriesForMonth(entries, monthKey)) {
-    if (entry.type !== "expense") continue;
-    spend[entry.category] = (spend[entry.category] ?? 0) + entry.amount;
+    if (!countsAsSpending(entry)) continue;
+    spend[entry.category] = (spend[entry.category] ?? 0) + spendingAmount(entry);
   }
   return spend;
 };

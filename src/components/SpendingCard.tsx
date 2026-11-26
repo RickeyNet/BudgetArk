@@ -322,9 +322,13 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
         // With a limit, the track represents the limit (100% = at limit).
         // Without one, it scales against the biggest category this month so
         // the bars stay comparable.
-        const fillPercent = item.limit
-          ? Math.min(ratio ?? 0, 1) * 100
-          : Math.min(1, item.spent / maxCategorySpent) * 100;
+        // Floored at 0: refunds can take a category's month below zero.
+        const fillPercent = Math.max(
+          0,
+          item.limit
+            ? Math.min(ratio ?? 0, 1) * 100
+            : Math.min(1, item.spent / maxCategorySpent) * 100
+        );
         // Day-weighted pace for the current month: the mark shows where an
         // even spread would be today, and running ahead of it turns the bar
         // amber before the raw 80% threshold would.
@@ -445,7 +449,11 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                         </Text>
                       )}
                       <View style={styles.expandedEntryLeft}>
-                        <Text style={styles.entryAmount}>{formatCurrency(entry.amount)}</Text>
+                        <Text
+                          style={[styles.entryAmount, entry.refund && { color: colors.success }]}
+                        >
+                          {formatCurrency(entry.amount)}
+                        </Text>
                         {entry.description ? (
                           <Text style={styles.entryDesc} numberOfLines={1}> - {entry.description}</Text>
                         ) : null}
@@ -473,6 +481,11 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                             numberOfLines={1}
                           >
                             👤 {formatPersonNames(entryPersonIds(entry), personNameById)}
+                          </Text>
+                        )}
+                        {entry.refund && (
+                          <Text style={[styles.entryEditHint, { color: colors.success }]}>
+                            ↩ {t("budget.spending.spendingCard.refund")}
                           </Text>
                         )}
                         {entry.lentTo && (

@@ -23,6 +23,7 @@ import type {
 } from "./calculations";
 import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 import { t } from "../i18n/translate";
+import { countsAsSpending, spendingAmount } from "./refunds";
 
 /* ── Category spend averages (from budget history) ── */
 
@@ -67,10 +68,11 @@ export const buildCategorySpendOptions = (
     if (month.businesses.length > 0) monthsTracked.add(monthKey);
     for (const entry of month.entries) {
       monthsTracked.add(monthKey);
-      if (entry.type !== "expense" || entry.category === "Debt Payments") {
+      if (!countsAsSpending(entry) || entry.category === "Debt Payments") {
         continue;
       }
-      totals[entry.category] = (totals[entry.category] ?? 0) + entry.amount;
+      totals[entry.category] =
+        (totals[entry.category] ?? 0) + spendingAmount(entry);
     }
   }
 

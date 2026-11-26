@@ -34,6 +34,7 @@ import {
 } from "./businessProfit";
 import { getMonthKey } from "./budgetMonths";
 import { roundToCents } from "./money";
+import { isEarnedIncome, spendingAmount } from "./refunds";
 
 // The frequency type lives in src/types (recurring income entries carry it
 // too - BudgetEntry.payFrequency); re-exported so existing importers of
@@ -266,8 +267,8 @@ export const ledgerSoFarThisMonth = (
     // so counting it as spent here would subtract it twice.
     if (day === today && entry.recurring && entry.type === "expense") continue;
     if (!Number.isFinite(entry.amount)) continue;
-    if (entry.type === "income") income += entry.amount;
-    else if (entry.type === "expense") expenses += entry.amount;
+    if (isEarnedIncome(entry)) income += entry.amount;
+    else expenses += spendingAmount(entry);
   }
   const liveDebtIds = new Set(debts.map((d) => d.id));
   let debtPaid = 0;

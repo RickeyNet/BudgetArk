@@ -70,6 +70,8 @@ export const budgetInbox: Localized<typeof en> = {
     personal: "Privat",
     peopleLabel: "PERSONEN",
     unassigned: "Nicht zugewiesen",
+    refundLabel: "Das ist eine Erstattung, kein Einkommen",
+    refundHint: "Wähle die Ausgabenkategorie, aus der es stammt. Es senkt die Ausgaben dieser Kategorie in diesem Monat und zählt nicht zu deinem Einkommen.",
     lentToLabel: "JEMANDEM GELIEHEN?",
     lentToHint:
       "Geld, das du zurückerwartest? Trag ein, wer es hat, und verfolge die Rückzahlungen unter Profil → Personen → Dir geschuldet.",

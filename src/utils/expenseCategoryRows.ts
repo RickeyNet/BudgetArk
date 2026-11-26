@@ -23,6 +23,7 @@ import {
 import type { DebtPaymentPlanLine } from "./debtPaymentPlan";
 import { describeFulfillment } from "./billFulfillment";
 import { isLoanEntry, loanOutstanding } from "./loans";
+import { countsAsSpending, isRefundEntry, spendingAmount } from "./refunds";
 
 /** One expandable line under a category row. */
 export type ExpenseCategoryEntry = {
@@ -47,6 +48,8 @@ export type ExpenseCategoryEntry = {
   lentTo?: string;
   /** What the borrower still owes on it. */
   loanOutstanding?: number;
+  /** Money back on a purchase (utils/refunds); `amount` is then negative. */
+  refund?: boolean;
 };
 
 export type ExpenseCategoryRow = {
@@ -109,6 +112,14 @@ export const buildExpenseCategoryRows = ({
       categoriesInPlay.add(category);
     }
   });
+  // A refund keeps its category listed even when it cancels the month's
+  // spending there (or lands a month after the purchase): the row is the
+  // only place the refund can be seen and edited.
+  for (const e of monthlyEntries) {
+    if (isRefundEntry(e) && (!businessOnly || e.businessId)) {
+      categoriesInPlay.add(e.category);
+    }
+  }
 
   return Array.from(categoriesInPlay)
     .map((category) => {
@@ -121,7 +132,7 @@ export const buildExpenseCategoryRows = ({
       const entries: ExpenseCategoryEntry[] = monthlyEntries
         .filter(
           (e) =>
-            e.type === "expense" &&
+            countsAsSpending(e) &&
             e.category === category &&
             (!businessOnly || e.businessId)
         )
@@ -129,7 +140,8 @@ export const buildExpenseCategoryRows = ({
           const bill = entriesById ? describeFulfillment(e, entriesById) : null;
           return {
             id: e.id,
-            amount: e.amount,
+            amount: spendingAmount(e),
+            ...(isRefundEntry(e) ? { refund: true } : {}),
             description: e.description,
             date: e.date,
             recurring: e.recurring,

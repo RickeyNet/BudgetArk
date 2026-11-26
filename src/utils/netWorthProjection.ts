@@ -23,6 +23,7 @@ import { getMonthKey, getMonthKeyOffset } from "./budgetMonths";
 import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 import { roundToCents } from "./money";
 import { addMonthsClamped } from "./debtFreeCountdown";
+import { isEarnedIncome, spendingAmount } from "./refunds";
 
 /** Complete months of budget history that feed the surplus average. */
 export const SURPLUS_LOOKBACK_MONTHS = 6;
@@ -114,9 +115,9 @@ export const estimateMonthlySurplus = (
     net += month.businessProfit;
     for (const entry of monthEntries) {
       if (!Number.isFinite(entry.amount)) continue;
-      if (entry.type === "income") net += entry.amount;
-      else if (entry.type === "expense" && !TRANSFER_CATEGORIES.has(entry.category)) {
-        net -= entry.amount;
+      if (isEarnedIncome(entry)) net += entry.amount;
+      else if (!TRANSFER_CATEGORIES.has(entry.category)) {
+        net -= spendingAmount(entry);
       }
     }
   }

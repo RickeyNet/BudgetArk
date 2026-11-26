@@ -22,6 +22,7 @@ import {
 } from "../types";
 import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 import { t } from "../i18n/translate";
+import { isEarnedIncome, spendingAmount } from "./refunds";
 
 /**
  * Categories that represent money moved *into* savings rather than spending.
@@ -126,12 +127,14 @@ const buildMonthAggregates = (
     for (const entry of month.entries) {
       if (!Number.isFinite(entry.amount) || entry.amount <= 0) continue;
       const agg = aggs[key];
-      if (entry.type === "income") {
+      if (isEarnedIncome(entry)) {
         agg.income += entry.amount;
       } else {
-        agg.expenses += entry.amount;
+        // A refund lands here as negative spending (utils/refunds).
+        const spent = spendingAmount(entry);
+        agg.expenses += spent;
         agg.byCategory[entry.category] =
-          (agg.byCategory[entry.category] ?? 0) + entry.amount;
+          (agg.byCategory[entry.category] ?? 0) + spent;
       }
     }
   }

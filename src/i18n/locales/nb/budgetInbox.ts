@@ -70,6 +70,8 @@ export const budgetInbox: Localized<typeof en> = {
     personal: "Personlig",
     peopleLabel: "PERSONER",
     unassigned: "Ikke tilordnet",
+    refundLabel: "Dette er en refusjon, ikke inntekt",
+    refundHint: "Velg utgiftskategorien pengene kom fra. Det senker forbruket i den kategorien denne måneden og holdes utenfor inntekten din.",
     lentToLabel: "UTLÅNT TIL NOEN?",
     lentToHint:
       "Penger du venter å få tilbake? Oppgi hvem som har dem, og følg hva de betaler tilbake under Profil → Personer → Til gode.",

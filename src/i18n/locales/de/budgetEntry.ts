@@ -134,6 +134,10 @@ export const budgetEntry: Localized<typeof en> = {
     hint: "Wird nie mit dem Gerät deines Partners synchronisiert. Zählt weiterhin in deinem Budget und ist in deinen Sicherungen und Exporten enthalten.",
     alreadySyncedNote: " Wurde diese Buchung schon synchronisiert, behält dein Partner die vorhandene Kopie.",
   },
+  refund: {
+    label: "↩ Das ist eine Erstattung",
+    hint: "Geld zurück für einen Kauf. Wähle die Ausgabenkategorie, aus der es stammt: Es senkt die Ausgaben dieser Kategorie in diesem Monat und zählt nicht als Einkommen.",
+  },
   loan: {
     label: "VERLIEHEN? (OPTIONAL)",
     hint: "Geld, das du zurückerwartest. Trag ein, wer es hat, und die Buchung erscheint unter Profil → Personen → Dir geschuldet, wo du Rückzahlungen erfasst. Sie zählt diesen Monat trotzdem als Ausgabe.",

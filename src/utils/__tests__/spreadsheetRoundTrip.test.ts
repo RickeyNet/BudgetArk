@@ -97,6 +97,9 @@ const entryFixtures = [
   // Private entry: the Private flag must round-trip - stripping it on a
   // backup/restore cycle would silently start syncing the entry to a partner.
   { id: "e8", type: "expense", category: "Shopping", amount: 75, date: "2026-06-07", createdAt: "2026-06-07T00:00:00.000Z", isPrivate: true },
+  // Refund: the Refund mark must round-trip, or a restore turns money back
+  // on a purchase into income again.
+  { id: "e8r", type: "income", category: "Shopping", amount: 20, date: "2026-06-09", createdAt: "2026-06-09T00:00:00.000Z", refund: true },
   // Actual charge standing in for the recurring e3 bill in June: the
   // FulfillsBillId link must round-trip, or a restore double-counts June.
   { id: "e10", type: "expense", category: "Housing", amount: 1237.5, date: "2026-06-08", createdAt: "2026-06-08T00:00:00.000Z", fulfillsRecurringId: "e3" },
@@ -206,7 +209,7 @@ describe("xlsx round-trip", () => {
 
     // Entries: e1-e8 survive; the recurring projections of e3 are dropped.
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e11", "e12", "e13", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e11", "e12", "e13", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e8r", "e9"]);
     // Earner's recurring income + a paycheck filed against it (v9).
     expect(byId.e12).toMatchObject({ type: "income", recurring: true, personId: "per1", payFrequency: "biweekly" });
     expect(byId.e13).toMatchObject({ type: "income", fulfillsRecurringId: "e12", personId: "per1" });
@@ -264,6 +267,8 @@ describe("xlsx round-trip", () => {
     // The partner-sync privacy flag round-trips; public entries never grow it.
     expect(byId.e8.isPrivate).toBe(true);
     expect(byId.e1.isPrivate).toBeUndefined();
+    expect(byId.e8r.refund).toBe(true);
+    expect(byId.e1.refund).toBeUndefined();
 
     // The Businesses sheet round-trips with timestamps intact (LWW needs them).
     expect(payload.businesses).toHaveLength(1);
@@ -372,7 +377,7 @@ describe("csv round-trip", () => {
 
     const payload = lastPayload();
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e11", "e12", "e13", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e11", "e12", "e13", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e8r", "e9"]);
     // Earner's recurring income + a paycheck filed against it (v9).
     expect(byId.e12).toMatchObject({ type: "income", recurring: true, personId: "per1", payFrequency: "biweekly" });
     expect(byId.e13).toMatchObject({ type: "income", fulfillsRecurringId: "e12", personId: "per1" });

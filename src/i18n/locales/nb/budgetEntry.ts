@@ -134,6 +134,10 @@ export const budgetEntry: Localized<typeof en> = {
     hint: "Synkes aldri til partnerens enhet. Teller fortsatt i budsjettet ditt og følger med i dine egne sikkerhetskopier og eksporter.",
     alreadySyncedNote: " Hvis denne posten har blitt synket tidligere, beholder partneren din kopien de allerede har.",
   },
+  refund: {
+    label: "↩ Dette er en refusjon",
+    hint: "Penger tilbake for et kjøp. Velg utgiftskategorien de kom fra: det senker forbruket i den kategorien denne måneden og regnes ikke som inntekt.",
+  },
   loan: {
     label: "UTLÅNT TIL NOEN? (VALGFRITT)",
     hint: "Penger du venter å få tilbake. Oppgi hvem som har dem, så vises posten under Profil → Personer → Til gode, der du logger hva de betaler tilbake. Den teller fortsatt som forbruk denne måneden.",

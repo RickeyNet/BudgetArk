@@ -132,6 +132,10 @@ export const budgetEntry = {
     hint: "Never syncs to your partner's device. Still counts in your budget and rides your own backups and exports.",
     alreadySyncedNote: " If this entry synced before, your partner keeps the copy they already have.",
   },
+  refund: {
+    label: "↩ This is a refund",
+    hint: "Money back on a purchase. Pick the spending category it came from: it lowers that category's spending this month and is not counted as income.",
+  },
   loan: {
     label: "LENT TO SOMEONE? (OPTIONAL)",
     hint: "Money you expect back. Name who has it and the entry shows up under Profile → People → Owed to You, where you log what they pay back. It still counts as spending this month.",

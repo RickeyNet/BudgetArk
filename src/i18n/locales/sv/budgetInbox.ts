@@ -70,6 +70,8 @@ export const budgetInbox: Localized<typeof en> = {
     personal: "Privat",
     peopleLabel: "PERSONER",
     unassigned: "Ej tilldelad",
+    refundLabel: "Det här är en återbetalning, inte inkomst",
+    refundHint: "Välj utgiftskategorin pengarna kom från. Det sänker kategorins utgifter den här månaden och räknas inte in i din inkomst.",
     lentToLabel: "UTLÅNAT TILL NÅGON?",
     lentToHint:
       "Pengar du väntar dig tillbaka? Ange vem som har dem och följ vad de betalar tillbaka under Profil → Personer → Att få tillbaka.",

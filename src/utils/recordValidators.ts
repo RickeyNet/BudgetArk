@@ -301,6 +301,9 @@ export const isBudgetEntryItem = (
   const taxSetAsideRateValid =
     item.taxSetAsideRate === undefined ||
     isSafeNumber(item.taxSetAsideRate, { min: 0, max: 100 });
+  // Refund mark (BudgetEntry.refund). Boolean-or-absent only, same
+  // reasoning as isPrivate below: a truthy non-boolean must not pass.
+  const refundValid = item.refund === undefined || typeof item.refund === "boolean";
   const attachmentsValid = isEntryAttachmentsValue(item.attachments);
   // Partner-sync privacy flag. Boolean-or-absent only: a peer or import
   // smuggling a truthy non-boolean here would still behave like `true`
@@ -346,6 +349,7 @@ export const isBudgetEntryItem = (
     taxSetAsideRateValid &&
     attachmentsValid &&
     isPrivateValid &&
+    refundValid &&
     fulfillsRecurringIdValid &&
     payFrequencyValid &&
     lentToValid &&
@@ -430,6 +434,9 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
     item.incomeType !== "1099"
   ) {
     return '"incomeType" must be exactly "w2" or "1099" when present';
+  }
+  if (item.refund !== undefined && typeof item.refund !== "boolean") {
+    return '"refund" must be true or false when present';
   }
   if (
     item.retirementContribution !== undefined &&

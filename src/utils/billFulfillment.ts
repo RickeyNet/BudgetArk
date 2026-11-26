@@ -33,6 +33,7 @@ import type {
   PayFrequency,
 } from "../types";
 import { isEntryActiveInMonth, listOccurrenceMonths } from "./recurrence";
+import { isEarnedIncome } from "./refunds";
 
 /** Sample size for the "your last N actuals averaged $X" estimate hint. */
 export const ESTIMATE_SAMPLE_SIZE = 3;
@@ -293,7 +294,8 @@ export const incomeRowsForMonth = (
   }
   const rows: IncomeRow[] = [];
   for (const entry of entries) {
-    if (entry.type !== "income" || folded.has(entry.id)) continue;
+    // Refunds are spending coming back, not an income line (utils/refunds).
+    if (!isEarnedIncome(entry) || folded.has(entry.id)) continue;
     if (!isEntryActiveInMonth(entry, monthKey)) continue;
     const actuals = entry.recurring ? fulfilled.get(entry.id) : undefined;
     if (!actuals || actuals.length === 0) {

@@ -29,6 +29,7 @@
 
 import { entryPersonIds, personAssignmentFields } from "../utils/entryPeople";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
+import { isRefundEntry } from "../utils/refunds";
 import {
   borrowerKey,
   LENT_TO_MAX_LENGTH,
@@ -226,6 +227,8 @@ interface EntryFormState {
   fulfillsRecurringId: string | undefined;
   /** Who the money was lent to (BudgetEntry.lentTo); "" = not a loan. */
   lentTo: string;
+  /** One-off income that is money back on a purchase (BudgetEntry.refund). */
+  refund: boolean;
   /** Recurring income: whose paycheck this is (BudgetEntry.personId on income). */
   earnerId: string | undefined;
   /** Recurring income: paychecks per month behind the estimate (BudgetEntry.payFrequency). */
@@ -267,6 +270,7 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
   isPrivate: !!entry?.isPrivate,
   fulfillsRecurringId: entry?.fulfillsRecurringId,
   lentTo: entry?.lentTo ?? "",
+  refund: !!entry && isRefundEntry(entry),
   earnerId: entry?.type === "income" ? entry.personId : undefined,
   payFrequency: entry?.payFrequency ?? "monthly",
 });
@@ -332,6 +336,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     initialForm.fulfillsRecurringId
   );
   const [lentTo, setLentTo] = useState(initialForm.lentTo);
+  const [refund, setRefund] = useState(initialForm.refund);
   const [earnerId, setEarnerId] = useState<string | undefined>(initialForm.earnerId);
   const [payFrequency, setPayFrequency] = useState<PayFrequency>(initialForm.payFrequency);
   // See the header comment for the attachment lifecycle. Files are written
@@ -376,6 +381,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       setIsPrivate(next.isPrivate);
       setFulfillsRecurringId(next.fulfillsRecurringId);
       setLentTo(next.lentTo);
+      setRefund(next.refund);
       setEarnerId(next.earnerId);
       setPayFrequency(next.payFrequency);
     }
@@ -407,6 +413,11 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   }
 
   const showDayPicker = recurring && type === "expense";
+  // "This is a refund" - one-off income only. While on, the entry is money
+  // back on a purchase (utils/refunds): it has no paycheck fields, no
+  // earner, and is never filed against a recurring income.
+  const showRefundToggle = type === "income" && !recurring;
+  const isRefund = showRefundToggle && refund;
 
   // Recurring entries this one-off could be the actual for, in the chosen
   // month: bills for an expense, earners' recurring income for a deposit.
@@ -428,7 +439,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const linkedRecurring = showBillPicker
     ? billCandidates.find((bill) => bill.id === fulfillsRecurringId)
     : undefined;
-  const effectiveFulfillsRecurringId = linkedRecurring?.id;
+  const effectiveFulfillsRecurringId = isRefund ? undefined : linkedRecurring?.id;
   // Earner's name for an income candidate pill ("Maria · est. $4,000/mo");
   // falls back to the entry's own label when nobody is assigned.
   const personNameById = useMemo(
@@ -565,6 +576,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setIsPrivate(next.isPrivate);
     setFulfillsRecurringId(next.fulfillsRecurringId);
     setLentTo(next.lentTo);
+    setRefund(next.refund);
     setEarnerId(next.earnerId);
     setPayFrequency(next.payFrequency);
     // Deliberately does NOT delete staged photo files - submit commits them
@@ -602,7 +614,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       ? normalizePaymentUrl(paymentUrl) ?? undefined
       : undefined;
 
-    const entryIncomeType = type === "income" ? incomeType : undefined;
+    const entryIncomeType = type === "income" && !isRefund ? incomeType : undefined;
     const contributionNum = parseMoneyInput(retirementContribution) ?? 0;
     const entryTaxSetAsideRate =
       entryIncomeType === "1099"
@@ -628,8 +640,13 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
         businessId: showBusinessPicker ? businessId : undefined,
         ...personAssignmentFields(
-          type === "expense" ? (showPersonPicker ? personIds : []) : incomePersonIds
+          type === "expense"
+            ? (showPersonPicker ? personIds : [])
+            : isRefund
+              ? []
+              : incomePersonIds
         ),
+        refund: isRefund || undefined,
         incomeType: entryIncomeType,
         taxSetAsideRate: entryTaxSetAsideRate,
         isPrivate: isPrivate || undefined,
@@ -672,6 +689,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     incomePersonIds,
     incomeType,
     isPrivate,
+    isRefund,
     lentTo,
     lines,
     linkedAccountId,
@@ -703,7 +721,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     const amountNum = parseMoneyInput(line?.amount ?? "") ?? 0;
     if (!(amountNum > 0)) return;
 
-    const entryIncomeType = type === "income" ? incomeType : undefined;
+    const entryIncomeType = type === "income" && !isRefund ? incomeType : undefined;
     const contributionNum = parseMoneyInput(retirementContribution) ?? 0;
     const editLentTo = showLoanField ? normalizeLentTo(lentTo) : undefined;
 
@@ -724,7 +742,11 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       businessId,
       // Expenses: who spent it. Income: the earner (or the earner of the
       // recurring income this deposit is filed against).
-      ...personAssignmentFields(type === "expense" ? personIds : incomePersonIds),
+      ...personAssignmentFields(
+        type === "expense" ? personIds : isRefund ? [] : incomePersonIds
+      ),
+      // Cleared when the type flips to expense or the entry turns recurring.
+      refund: isRefund || undefined,
       payFrequency: type === "income" && recurring ? payFrequency : undefined,
       // Cleared when the type flips to expense or the income type changes.
       incomeType: entryIncomeType,
@@ -762,6 +784,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     incomePersonIds,
     incomeType,
     isPrivate,
+    isRefund,
     isValid,
     lentTo,
     lines,
@@ -883,7 +906,34 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         </View>
       </View>
 
-      {type === "income" && (
+      {showRefundToggle && (
+        <TouchableOpacity
+          style={styles.recurringRow}
+          onPress={() => setRefund((prev) => !prev)}
+          activeOpacity={0.7}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: refund }}
+          accessibilityLabel={t("budget.entry.refund.label")}
+        >
+          <View
+            style={[
+              styles.recurringToggle,
+              refund && {
+                backgroundColor: colors.accent,
+                borderColor: colors.accent,
+              },
+            ]}
+          >
+            {refund && <Text style={styles.recurringCheck}>✓</Text>}
+          </View>
+          <View style={styles.recurringTextWrap}>
+            <Text style={styles.recurringLabel}>{t("budget.entry.refund.label")}</Text>
+            <Text style={styles.recurringHint}>{t("budget.entry.refund.hint")}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {type === "income" && !isRefund && (
         <View style={styles.field}>
           <Text style={styles.label}>{t("budget.entry.incomeType.label")}</Text>
           <Text style={styles.accountPickerHint}>{t("budget.entry.incomeType.hint")}</Text>
@@ -911,7 +961,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         </View>
       )}
 
-      {type === "income" && incomeType === "w2" && (
+      {type === "income" && !isRefund && incomeType === "w2" && (
         <View style={styles.field}>
           <Text style={styles.label}>{t("budget.entry.retirement.label")}</Text>
           <Text style={styles.accountPickerHint}>
@@ -933,7 +983,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         </View>
       )}
 
-      {type === "income" && incomeType === "1099" && (
+      {type === "income" && !isRefund && incomeType === "1099" && (
         <View style={styles.field}>
           <Text style={styles.label}>{t("budget.entry.taxSetAside.label")}</Text>
           <Text style={styles.accountPickerHint}>{t("budget.entry.taxSetAside.hint")}</Text>
@@ -1192,7 +1242,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       {/* A deposit is one of this month's paychecks for an earner: pick whose,
           and their monthly estimate shrinks by this paycheck's share (see
           utils/billFulfillment) instead of being counted twice. */}
-      {showBillPicker && type === "income" && (
+      {showBillPicker && type === "income" && !isRefund && (
         <View style={styles.field}>
           <Text style={styles.label}>{t("budget.entry.paycheck.label")}</Text>
           <TagPillPicker

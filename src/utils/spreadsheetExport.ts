@@ -169,6 +169,10 @@ const BUDGET_ENTRY_COLUMNS = [
   // Round-tripped as a privacy requirement - if a backup/restore cycle
   // stripped it, the entry would silently start syncing again.
   "Private",
+  // Refund mark (BudgetEntry.refund): "yes" = money back on a purchase,
+  // counted as negative spending. Round-tripped: without it a restore
+  // would turn every refund back into income.
+  "Refund",
   // Recurring bill this one-off is the actual charge for (see
   // BudgetEntry.fulfillsRecurringId). Round-tripped: without it a restore
   // would count both the estimate and the actual in that month.
@@ -394,6 +398,7 @@ const budgetEntryToRow = (
   Retirement401k: entry.retirementContribution ?? "",
   TaxSetAsideRate: entry.taxSetAsideRate ?? "",
   Private: entry.isPrivate ? "yes" : "",
+  Refund: entry.refund ? "yes" : "",
   FulfillsBillId: entry.fulfillsRecurringId ?? "",
   PayFrequency: entry.payFrequency ?? "",
   LentTo: entry.lentTo ?? "",

@@ -42,6 +42,7 @@ import {
 } from "./holdingsMath";
 import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 import { t } from "../i18n/translate";
+import { isEarnedIncome, spendingAmount } from "./refunds";
 
 /** How many trailing months the Bridge cash-flow panel shows by default. */
 export const TRAILING_CASH_FLOW_MONTHS = 6;
@@ -84,8 +85,8 @@ export const buildTrailingCashFlow = (
     let income = month.businessProfit;
     let expense = 0;
     for (const entry of month.entries) {
-      if (entry.type === "income") income += entry.amount;
-      else expense += entry.amount;
+      if (isEarnedIncome(entry)) income += entry.amount;
+      else expense += spendingAmount(entry);
     }
     buckets.push({
       label: d.toLocaleDateString(undefined, { month: "short" }),

@@ -27,6 +27,7 @@
 
 import type { BudgetEntry } from "../types";
 import { entriesForMonth } from "./billFulfillment";
+import { countsAsSpending, isEarnedIncome, spendingAmount } from "./refunds";
 
 const roundCents = (value: number): number => Math.round(value * 100) / 100;
 
@@ -70,7 +71,8 @@ export const incomeTrackedBusinessIds = (
 ): Set<string> => {
   const ids = new Set<string>();
   for (const entry of entries) {
-    if (entry.type === "income" && entry.businessId && !entry.deletedAt) {
+    // A refund is not business income - it must not start netting a business.
+    if (isEarnedIncome(entry) && entry.businessId && !entry.deletedAt) {
       ids.add(entry.businessId);
     }
   }
@@ -107,8 +109,8 @@ export const summarizeBusinessEntries = (
       };
       byId.set(entry.businessId, line);
     }
-    if (entry.type === "income") line.income += entry.amount;
-    else if (entry.type === "expense") line.expenses += entry.amount;
+    if (isEarnedIncome(entry)) line.income += entry.amount;
+    else if (countsAsSpending(entry)) line.expenses += spendingAmount(entry);
     else continue;
     line.entries.push(entry);
   }

@@ -31,6 +31,7 @@ import {
   listUnfulfilledOccurrenceMonths,
 } from "./billFulfillment";
 import { currentMonthKey } from "./businessReport";
+import { isEarnedIncome } from "./refunds";
 
 /** One occurrence assigned to a person within the report year. */
 export interface PersonReportLine {
@@ -214,7 +215,7 @@ export const computePersonReport = (
     for (const monthKey of monthKeysBetween(windowStart, windowEnd)) {
       const monthIdx = Number(monthKey.split("-")[1]) - 1;
       for (const entry of entriesForMonth(entries, monthKey)) {
-        if (entry.type !== "income" || !entry.personId || entry.deletedAt) continue;
+        if (!isEarnedIncome(entry) || !entry.personId || entry.deletedAt) continue;
         let group = groups.get(entry.personId);
         if (!group) {
           group = emptyGroup(entry.personId, personById.get(entry.personId));

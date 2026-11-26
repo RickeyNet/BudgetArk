@@ -140,6 +140,58 @@ describe("approvePendingTransaction", () => {
     expect(inboxNow()).toHaveLength(0);
   });
 
+  it("files a deposit marked as a refund against its spending category, with no earner link and no rule", async () => {
+    const deposit = makePendingTransaction({
+      id: "p-refund",
+      amount: 40,
+      suggestedType: "income",
+      merchant: "AMAZON",
+      suggestedRecurringId: "paycheck-1",
+    });
+    seed(INBOX_KEY, [deposit]);
+    const entry = await approvePendingTransaction({
+      pendingId: deposit.id,
+      category: "Shopping",
+      refund: true,
+      rememberRule: true,
+    });
+    expect(entry).toMatchObject({ type: "income", category: "Shopping", amount: 40, refund: true });
+    expect(entry?.fulfillsRecurringId).toBeUndefined();
+    expect(rulesNow()).toHaveLength(0);
+  });
+
+  it("ignores the refund mark on an outflow", async () => {
+    const charge = makePendingTransaction({ id: "p-charge" });
+    seed(INBOX_KEY, [charge]);
+    const entry = await approvePendingTransaction({
+      pendingId: charge.id,
+      category: "Shopping",
+      refund: true,
+    });
+    expect(entry?.type).toBe("expense");
+    expect(entry?.refund).toBeUndefined();
+  });
+
+  it("auto-files a deposit from a merchant with a spending rule as a refund", async () => {
+    const charge = makePendingTransaction({ id: "p-buy", merchant: "AMAZON" });
+    seed(INBOX_KEY, [charge]);
+    await approvePendingTransaction({
+      pendingId: charge.id,
+      category: "Shopping",
+      rememberRule: true,
+    });
+    const deposit = makePendingTransaction({
+      id: "p-back",
+      amount: 40,
+      suggestedType: "income",
+      merchant: "AMAZON",
+    });
+    seed(INBOX_KEY, [deposit]);
+    expect(await autoApproveInboxByRules()).toBe(1);
+    const back = entriesNow().find((e) => e.externalTxId === "p-back");
+    expect(back).toMatchObject({ type: "income", category: "Shopping", refund: true });
+  });
+
   it("returns null and writes nothing when the item no longer exists (double-tap)", async () => {
     seed(INBOX_KEY, []);
     const entry = await approvePendingTransaction({ pendingId: "gone", category: "Grocery" });

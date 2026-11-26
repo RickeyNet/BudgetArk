@@ -23,6 +23,7 @@ import { calcMonthsToPayoff, calcTotalInterest } from "./calculations";
 import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 import { parseMoneyInput } from "./parseMoneyInput";
 import { t } from "../i18n/translate";
+import { isEarnedIncome, spendingAmount } from "./refunds";
 
 /* ── Monthly cash flow (from budget history) ── */
 
@@ -72,8 +73,8 @@ export const calcMonthlyCashFlow = (
     incomeTotal += month.businessProfit;
     for (const entry of month.entries) {
       monthsTracked.add(monthKey);
-      if (entry.type === "income") incomeTotal += entry.amount;
-      else if (entry.type === "expense") expenseTotal += entry.amount;
+      if (isEarnedIncome(entry)) incomeTotal += entry.amount;
+      else expenseTotal += spendingAmount(entry);
     }
   }
 

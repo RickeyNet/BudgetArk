@@ -68,6 +68,8 @@ export const budgetInbox = {
     personal: "Personal",
     peopleLabel: "PEOPLE",
     unassigned: "Unassigned",
+    refundLabel: "This is a refund, not income",
+    refundHint: "Pick the spending category it came from. It lowers that category's spending this month and stays out of your income.",
     lentToLabel: "LENT TO SOMEONE?",
     lentToHint:
       "Money you expect back? Name who has it and track what they pay back under Profile → People → Owed to You.",

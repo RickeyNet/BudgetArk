@@ -448,6 +448,16 @@ export interface BudgetEntry {
    */
   incomeType?: IncomeType;
   /**
+   * Money back on a purchase (a return, a reversed charge) rather than
+   * earnings. Set only on one-off income entries, whose `category` is then
+   * the SPENDING category the money came back to. Counts as negative
+   * spending in that category and never as income - read it through
+   * utils/refunds, not directly. Stored on an income entry (not as a
+   * negative expense) so older peers still accept the record; they show it
+   * as plain income. Optional; absent = not a refund.
+   */
+  refund?: boolean;
+  /**
    * Dollars contributed to a 401(k)/retirement plan out of this W-2
    * paycheck. Withheld before the deposit, so it is deliberately NOT part
    * of `amount` and never added to income totals - it surfaces separately

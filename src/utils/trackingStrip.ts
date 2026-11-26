@@ -20,6 +20,7 @@ import type { BudgetEntry, CategoryBudgetLimit } from "../types";
 import { describeFulfillment } from "./billFulfillment";
 import { personalEntriesForMonth } from "./businessProfit";
 import { t } from "../i18n/translate";
+import { countsAsSpending, spendingAmount } from "./refunds";
 
 export interface TrackingStripRow {
   id: string;
@@ -67,8 +68,8 @@ export const buildTrackingStrip = ({
   const spentThisMonth = round2(
     // Household spending - see utils/businessProfit.
     personalEntriesForMonth(live, monthKey)
-      .filter((e) => e.type === "expense")
-      .reduce((sum, e) => sum + e.amount, 0)
+      .filter(countsAsSpending)
+      .reduce((sum, e) => sum + spendingAmount(e), 0)
   );
 
   const liveLimits = limits.filter((l) => !l.deletedAt && l.monthlyLimit > 0);

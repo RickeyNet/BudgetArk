@@ -36,6 +36,7 @@ export const budgetSpending = {
     },
     deletedBusiness: "(deleted)",
     owed: " · {{amount}} owed",
+    refund: "Refund",
     paidBack: " · paid back",
     billFallback: "Bill",
     billEstimate: " · est. {{amount}}",

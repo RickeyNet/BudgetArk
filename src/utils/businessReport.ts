@@ -26,6 +26,7 @@ import {
   fulfilledMonthsByBill,
   listUnfulfilledOccurrenceMonths,
 } from "./billFulfillment";
+import { isEarnedIncome } from "./refunds";
 
 /** One expense or income occurrence attributed to a business within the report year. */
 export interface BusinessReportLine {
@@ -197,7 +198,7 @@ export const computeBusinessReport = (
     // to the paychecks still expected (projectRecurringForMonth). The
     // yearly shortcut the expenses use above would count it wrong.
     const hasBusinessIncome = entries.some(
-      (entry) => entry.type === "income" && entry.businessId && !entry.deletedAt
+      (entry) => isEarnedIncome(entry) && entry.businessId && !entry.deletedAt
     );
     for (
       let month = 1;
@@ -207,7 +208,7 @@ export const computeBusinessReport = (
       const monthKey = `${year}-${String(month).padStart(2, "0")}`;
       if (monthKey > windowEnd) break;
       for (const entry of entriesForMonth(entries, monthKey)) {
-        if (entry.type !== "income" || !entry.businessId || entry.deletedAt) {
+        if (!isEarnedIncome(entry) || !entry.businessId || entry.deletedAt) {
           continue;
         }
         const group = groupFor(entry.businessId);

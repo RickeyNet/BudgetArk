@@ -42,6 +42,7 @@ export const budgetSpending: LocalizedPlural<typeof en> = {
     },
     deletedBusiness: "(удалено)",
     owed: " · {{amount}} к возврату",
+    refund: "Возврат",
     paidBack: " · возвращено",
     billFallback: "Счёт",
     billEstimate: " · ≈ {{amount}}",

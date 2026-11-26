@@ -40,6 +40,7 @@ export const budgetSpending: Localized<typeof en> = {
     },
     deletedBusiness: "(borttaget)",
     owed: " · {{amount}} att få",
+    refund: "Återbetalning",
     paidBack: " · återbetalt",
     billFallback: "Räkning",
     billEstimate: " · ca {{amount}}",

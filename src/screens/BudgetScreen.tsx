@@ -131,6 +131,7 @@ import type { DensityTokens } from "../theme/density";
 import { getRecurrenceTag } from "../utils/recurrence";
 import { entriesForMonth, incomeRowsForMonth } from "../utils/billFulfillment";
 import { formatDayLabel } from "../utils/dateFormat";
+import { countsAsSpending, isEarnedIncome, spendingAmount } from "../utils/refunds";
 import {
   incomeTrackedBusinessIds,
   isNettedBusinessEntry,
@@ -470,7 +471,7 @@ const BudgetScreen: React.FC = () => {
     () =>
       budgetMonth.businessProfit +
       monthlyEntries
-        .filter((entry) => entry.type === "income")
+        .filter(isEarnedIncome)
         .reduce((sum, entry) => sum + entry.amount, 0),
     [budgetMonth.businessProfit, monthlyEntries]
   );
@@ -528,9 +529,10 @@ const BudgetScreen: React.FC = () => {
 
   const monthlyExpenses = useMemo(
     () => {
+      // Refunds count here as negative spending (utils/refunds).
       const manualExpenses = monthlyEntries
-        .filter((entry) => entry.type === "expense")
-        .reduce((sum, entry) => sum + entry.amount, 0);
+        .filter(countsAsSpending)
+        .reduce((sum, entry) => sum + spendingAmount(entry), 0);
 
       return manualExpenses + debtPaymentsTotal;
     },
@@ -586,9 +588,9 @@ const BudgetScreen: React.FC = () => {
     const map: Record<string, number> = {};
 
     monthlyEntries
-      .filter((entry) => entry.type === "expense")
+      .filter(countsAsSpending)
       .forEach((entry) => {
-        map[entry.category] = (map[entry.category] ?? 0) + entry.amount;
+        map[entry.category] = (map[entry.category] ?? 0) + spendingAmount(entry);
       });
 
     if (debtPaymentsTotal > 0) {
@@ -603,7 +605,7 @@ const BudgetScreen: React.FC = () => {
   const hasBusinessSpending = useMemo(
     () =>
       rawMonthlyEntries.some(
-        (entry) => entry.type === "expense" && entry.businessId
+        (entry) => countsAsSpending(entry) && entry.businessId
       ),
     [rawMonthlyEntries]
   );
@@ -622,9 +624,9 @@ const BudgetScreen: React.FC = () => {
     // Raw month: an income-tracking business's bills are not in the
     // personal entries, and this chip is exactly where they are reviewed.
     rawMonthlyEntries
-      .filter((entry) => entry.type === "expense" && entry.businessId)
+      .filter((entry) => countsAsSpending(entry) && entry.businessId)
       .forEach((entry) => {
-        map[entry.category] = (map[entry.category] ?? 0) + entry.amount;
+        map[entry.category] = (map[entry.category] ?? 0) + spendingAmount(entry);
       });
     return map;
   }, [businessOnly, expensesByCategory, rawMonthlyEntries]);
