@@ -10,6 +10,7 @@ import {
   isValidTenant,
   lastDueMonth,
   normalizeRentTerms,
+  planPastPayments,
   removeTenant,
   rentForMonth,
   resolveTenantId,
@@ -442,5 +443,69 @@ describe("late fees and one-off charges", () => {
     );
     expect(ledger.charges).toEqual([]);
     expect(ledger.outstanding).toBe(0);
+  });
+});
+
+describe("planPastPayments", () => {
+  const today = day(2026, 4, 10);
+  const entriesFor = (t: Tenant, upTo: string): BudgetEntry[] =>
+    planPastPayments(buildTenantLedger(t, "house", [], today), upTo).map((p, i) =>
+      payment({ id: `b${i}`, amount: p.amount, date: `${p.date}T12:00:00.000Z` })
+    );
+
+  it("plans one payment per due month, dated on the due day, at that month's rent", () => {
+    const t = tenant({
+      rents: [
+        { from: "2026-01", amount: 1000 },
+        { from: "2026-03", amount: 1100 },
+      ],
+      dueDay: 31,
+    });
+    // April's rent (due the 30th) has not fallen due on the 10th.
+    expect(planPastPayments(buildTenantLedger(t, "house", [], today), "2026-12")).toEqual([
+      { monthKey: "2026-01", date: "2026-01-31", amount: 1000 },
+      { monthKey: "2026-02", date: "2026-02-28", amount: 1000 },
+      { monthKey: "2026-03", date: "2026-03-31", amount: 1100 },
+    ]);
+  });
+
+  it("stops at the chosen month and leaves later months owing", () => {
+    const t = tenant();
+    const entries = entriesFor(t, "2026-02");
+    expect(entries).toHaveLength(2);
+    const ledger = buildTenantLedger(t, "house", entries, today);
+    expect(ledger.months.map((m) => m.status)).toEqual(["paid", "paid", "unpaid", "unpaid"]);
+    expect(ledger.outstanding).toBe(2000);
+  });
+
+  it("tops up a part-paid month, skips paid ones, and adds nothing when run again", () => {
+    const t = tenant();
+    const existing = [payment({ amount: 1400 })];
+    const ledger = buildTenantLedger(t, "house", existing, today);
+    const plan = planPastPayments(ledger, "2026-04");
+    expect(plan.map((p) => [p.monthKey, p.amount])).toEqual([
+      ["2026-02", 600],
+      ["2026-03", 1000],
+      ["2026-04", 1000],
+    ]);
+    const after = buildTenantLedger(
+      t,
+      "house",
+      [
+        ...existing,
+        ...plan.map((p, i) =>
+          payment({ id: `b${i}`, amount: p.amount, date: `${p.date}T12:00:00.000Z` })
+        ),
+      ],
+      today
+    );
+    expect(after.outstanding).toBe(0);
+    expect(planPastPayments(after, "2026-04")).toEqual([]);
+  });
+
+  it("returns nothing for a malformed month or a month before the tenant started", () => {
+    const ledger = buildTenantLedger(tenant(), "house", [], today);
+    expect(planPastPayments(ledger, "April")).toEqual([]);
+    expect(planPastPayments(ledger, "2025-12")).toEqual([]);
   });
 });

@@ -544,3 +544,41 @@ export const resolveTenantId = (
     ? tenantId
     : undefined;
 };
+
+/** One back-dated rent payment to create for a month not yet fully paid. */
+export interface PastPayment {
+  monthKey: string;
+  /** The month's due date (YYYY-MM-DD) - when the payment is dated. */
+  date: string;
+  amount: number;
+}
+
+/** Most payments one catch-up may create (20 years of months). */
+export const MAX_PAST_PAYMENTS = 240;
+
+/**
+ * The payments that bring a tenant's rent up to date through a month:
+ * one per month that has fallen due up to and including `throughMonth`,
+ * for whatever that month still owes, dated on its due day. Months
+ * already paid are skipped, so running it twice adds nothing. A month
+ * that is not due yet is never included - `throughMonth` in the future
+ * simply means "up to now". Rent only: late fees and an opening balance
+ * are not part of the plan.
+ */
+export const planPastPayments = (
+  ledger: Pick<TenantLedger, "tenant" | "months">,
+  throughMonth: string
+): PastPayment[] => {
+  if (!isMonthKey(throughMonth)) return [];
+  const plan: PastPayment[] = [];
+  for (const month of ledger.months) {
+    if (month.monthKey > throughMonth || !(month.outstanding > 0)) continue;
+    const dueDay = Math.min(ledger.tenant.dueDay ?? 1, daysInMonth(month.monthKey));
+    plan.push({
+      monthKey: month.monthKey,
+      date: `${month.monthKey}-${String(dueDay).padStart(2, "0")}`,
+      amount: roundToCents(month.outstanding),
+    });
+  }
+  return plan;
+};

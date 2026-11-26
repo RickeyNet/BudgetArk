@@ -4,7 +4,8 @@
  *
  * The rent roll of one business (a rental property): its tenants, each
  * one's monthly rent, what they owe right now, the month-by-month record
- * a quick "log payment", and late fees / one-off charges. All arithmetic is utils/tenants - rent falls
+ * a quick "log payment", late fees / one-off charges, and a catch-up that
+ * adds a back-dated tenant's past payments in one go. All arithmetic is utils/tenants - rent falls
  * due every month and income tagged to the tenant pays it down, so a short
  * payment simply leaves the rest owing.
  *
@@ -34,8 +35,8 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useBusinesses } from "../people/PeopleProvider";
-import { addBudgetEntry } from "../storage/budgetStorage";
-import type { BudgetEntry, Business, RentTerm } from "../types";
+import { addBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
+import type { BudgetEntry, Business, RentTerm, Tenant } from "../types";
 import {
   MAX_TENANT_CHARGE_NOTE_LENGTH,
   MAX_TENANT_NAME_LENGTH,
@@ -46,13 +47,17 @@ import {
   removeTenantCharge,
   buildRentRoll,
   buildTenant,
+  buildTenantLedger,
   businessTenants,
   currentRent,
   isMonthKey,
+  MAX_PAST_PAYMENTS,
   MAX_RENT_AMOUNT,
+  planPastPayments,
   removeTenant,
   setRentFrom,
   upsertTenant,
+  type PastPayment,
   type TenantLedger,
 } from "../utils/tenants";
 import { formatMonthKeyLabel, getMonthKey } from "../utils/budgetMonths";
@@ -83,6 +88,8 @@ interface TenantForm {
   dueDay: string;
   opening: string;
   endMonth: string;
+  /** New tenant only: last month already paid in full (YYYY-MM), optional. */
+  paidThrough: string;
   /** Existing tenant's rent terms as edited so far. */
   terms: RentTerm[];
 }
@@ -108,6 +115,9 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
   const [paymentFor, setPaymentFor] = useState<string | null>(null);
   /** Tenant whose "add charge" form (late fee / one-off) is open. */
   const [chargeFor, setChargeFor] = useState<string | null>(null);
+  /** Tenant whose "add past payments" catch-up form is open. */
+  const [pastFor, setPastFor] = useState<string | null>(null);
+  const [draftThrough, setDraftThrough] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [draftAmount, setDraftAmount] = useState("");
   const [draftDate, setDraftDate] = useState("");
@@ -127,10 +137,12 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
       dueDay: "1",
       opening: "",
       endMonth: "",
+      paidThrough: "",
       terms: [],
     });
     setPaymentFor(null);
     setChargeFor(null);
+    setPastFor(null);
     setError(null);
   }, []);
 
@@ -144,10 +156,12 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
       dueDay: String(tenant.dueDay ?? 1),
       opening: tenant.openingBalance ? String(tenant.openingBalance) : "",
       endMonth: tenant.endMonth ?? "",
+      paidThrough: "",
       terms: tenant.rents,
     });
     setPaymentFor(null);
     setChargeFor(null);
+    setPastFor(null);
     setError(null);
   }, []);
 
@@ -171,6 +185,32 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
       return true;
     },
     [business.id, updateBusiness]
+  );
+
+  /** Write a catch-up plan as ordinary rent payments (one atomic save). */
+  const savePastPayments = useCallback(
+    async (tenant: Tenant, plan: readonly PastPayment[]) => {
+      const now = new Date().toISOString();
+      await addBudgetEntries(
+        plan.map((item) => ({
+          id: generateUUID(),
+          type: "income" as const,
+          category: "Other",
+          amount: item.amount,
+          description: t("modals.people.tenants.paymentDescription", {
+            name: tenant.name,
+          }),
+          // Noon UTC like every manual entry (see utils/entryDate).
+          date: `${item.date}T12:00:00.000Z`,
+          createdAt: now,
+          updatedAt: now,
+          businessId: business.id,
+          tenantId: tenant.id,
+        }))
+      );
+      await onEntriesChanged();
+    },
+    [business.id, onEntriesChanged, t]
   );
 
   const handleSaveTenant = useCallback(async () => {
@@ -232,10 +272,40 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
       setError(t("modals.people.tenants.errors.limit", { max: MAX_TENANTS_PER_BUSINESS }));
       return;
     }
+    // A back-dated new tenant can be marked paid through a month: the
+    // plan is worked out before anything is saved so a bad month or an
+    // oversized catch-up stops here.
+    const paidThrough = form.id === null ? form.paidThrough.trim() : "";
+    let pastPlan: PastPayment[] = [];
+    if (paidThrough) {
+      if (!isMonthKey(paidThrough)) {
+        setError(t("modals.people.tenants.errors.monthFormat"));
+        return;
+      }
+      pastPlan = planPastPayments(
+        buildTenantLedger(built, business.id, entries),
+        paidThrough
+      );
+      if (pastPlan.length > MAX_PAST_PAYMENTS) {
+        setError(t("modals.people.tenants.errors.tooManyPast", { max: MAX_PAST_PAYMENTS }));
+        return;
+      }
+    }
     setBusy(true);
     try {
       if (await saveTenants(next)) {
         setForm(null);
+        if (pastPlan.length > 0) {
+          try {
+            await savePastPayments(built, pastPlan);
+          } catch (err) {
+            // The tenant is saved; only the payments failed. They can be
+            // added again from "Add past payments" on the card.
+            triggerHaptic("error");
+            setError(describeError(err, t("modals.people.tenants.errors.paymentFailed")));
+            return;
+          }
+        }
         triggerHaptic("success");
       }
     } catch (err) {
@@ -243,7 +313,7 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
     } finally {
       setBusy(false);
     }
-  }, [busy, form, saveTenants, t, tenants]);
+  }, [business.id, busy, entries, form, savePastPayments, saveTenants, t, tenants]);
 
   const handleRemoveTenant = useCallback(
     (ledger: TenantLedger) => {
@@ -281,6 +351,7 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
     setDraftDate(toLocalDateKey(new Date()));
     setForm(null);
     setChargeFor(null);
+    setPastFor(null);
     setError(null);
   }, []);
 
@@ -293,9 +364,54 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
       setDraftDate(toLocalDateKey(new Date()));
       setForm(null);
       setPaymentFor(null);
+      setPastFor(null);
       setError(null);
     },
     [t]
+  );
+
+  const openPast = useCallback((ledger: TenantLedger) => {
+    setPastFor(ledger.tenant.id);
+    // Default: everything due so far.
+    const last = ledger.months[ledger.months.length - 1];
+    setDraftThrough(last ? last.monthKey : getMonthKey());
+    setForm(null);
+    setPaymentFor(null);
+    setChargeFor(null);
+    setError(null);
+  }, []);
+
+  const handleSavePast = useCallback(
+    async (ledger: TenantLedger) => {
+      if (busy) return;
+      const through = draftThrough.trim();
+      if (!isMonthKey(through)) {
+        setError(t("modals.people.tenants.errors.monthFormat"));
+        return;
+      }
+      const plan = planPastPayments(ledger, through);
+      if (plan.length === 0) {
+        setError(t("modals.people.tenants.past.nothing"));
+        return;
+      }
+      if (plan.length > MAX_PAST_PAYMENTS) {
+        setError(t("modals.people.tenants.errors.tooManyPast", { max: MAX_PAST_PAYMENTS }));
+        return;
+      }
+      setBusy(true);
+      setError(null);
+      try {
+        await savePastPayments(ledger.tenant, plan);
+        setPastFor(null);
+        triggerHaptic("success");
+      } catch (err) {
+        triggerHaptic("error");
+        setError(describeError(err, t("modals.people.tenants.errors.paymentFailed")));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, draftThrough, savePastPayments, t]
   );
 
   const handleSaveCharge = useCallback(
@@ -496,6 +612,23 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
           keyboardType="decimal-pad"
         />
 
+        {isNew ? (
+          <>
+            <Text style={styles.label}>{t("modals.people.tenants.form.paidThroughLabel")}</Text>
+            <Text style={styles.hint}>{t("modals.people.tenants.form.paidThroughHint")}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="2026-10"
+              placeholderTextColor={colors.textMuted}
+              value={form.paidThrough}
+              onChangeText={(paidThrough) => patchForm({ paidThrough })}
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={7}
+            />
+          </>
+        ) : null}
+
         {!isNew ? (
           <>
             <Text style={styles.label}>{t("modals.people.tenants.form.endMonthLabel")}</Text>
@@ -658,6 +791,9 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
     const { tenant } = ledger;
     const paying = paymentFor === tenant.id;
     const charging = chargeFor === tenant.id;
+    const catchingUp = pastFor === tenant.id;
+    const pastPlan = catchingUp ? planPastPayments(ledger, draftThrough.trim()) : [];
+    const pastTotal = pastPlan.reduce((sum, item) => sum + item.amount, 0);
     const showHistory = historyFor === tenant.id;
     return (
       <View key={tenant.id} style={styles.tenantCard}>
@@ -722,6 +858,15 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
             })}
           >
             <Text style={styles.link}>{t("modals.people.tenants.addCharge")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => (catchingUp ? setPastFor(null) : openPast(ledger))}
+            accessibilityRole="button"
+            accessibilityLabel={t("modals.people.tenants.pastPaymentsA11y", {
+              name: tenant.name,
+            })}
+          >
+            <Text style={styles.link}>{t("modals.people.tenants.pastPayments")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setHistoryFor(showHistory ? null : tenant.id)}
@@ -846,6 +991,54 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
           </View>
         ) : null}
 
+        {catchingUp ? (
+          <View style={styles.paymentForm}>
+            <Text style={styles.label}>{t("modals.people.tenants.past.throughLabel")}</Text>
+            <Text style={styles.hint}>{t("modals.people.tenants.past.hint")}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="2026-10"
+              placeholderTextColor={colors.textMuted}
+              value={draftThrough}
+              onChangeText={(text) => {
+                setDraftThrough(text);
+                setError(null);
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={7}
+            />
+            {pastPlan.length > 0 ? (
+              <Text style={styles.termText}>
+                {t("modals.people.tenants.past.preview", {
+                  payments: pastPlan.length,
+                  total: formatCurrency(pastTotal),
+                  from: formatMonthKeyLabel(pastPlan[0].monthKey),
+                  to: formatMonthKeyLabel(pastPlan[pastPlan.length - 1].monthKey),
+                })}
+              </Text>
+            ) : isMonthKey(draftThrough.trim()) ? (
+              <Text style={styles.hint}>{t("modals.people.tenants.past.nothing")}</Text>
+            ) : null}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => setPastFor(null)}
+              >
+                <Text style={styles.secondaryText}>{t("common.cancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, busy && styles.disabled]}
+                onPress={() => void handleSavePast(ledger)}
+                disabled={busy}
+              >
+                <Text style={styles.primaryText}>{t("modals.people.tenants.past.save")}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
         {showHistory ? renderHistory(ledger) : null}
         {form?.id === tenant.id ? renderForm() : null}
       </View>
@@ -884,7 +1077,7 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
       )}
 
       {/* An error with no form open (a failed remove) still has to show. */}
-      {error && !form && !paymentFor && !chargeFor ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error && !form && !paymentFor && !chargeFor && !pastFor ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {roll.ledgers.map(renderTenant)}
 
