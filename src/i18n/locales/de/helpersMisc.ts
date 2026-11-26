@@ -64,6 +64,7 @@ export const helpersMisc: Localized<typeof en> = {
     nameRequired: "Gib einen Unternehmensnamen ein.",
     limit: "Du kannst bis zu {{max}} Unternehmen anlegen.",
     notFound: "Unternehmen nicht gefunden.",
+    tenantsInvalid: "Die Mieter konnten nicht gespeichert werden. Prüfe die Angaben und versuche es erneut.",
   },
   pin: {
     incorrect: "Falsche PIN - versuch es erneut",

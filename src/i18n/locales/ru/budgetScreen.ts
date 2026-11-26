@@ -43,6 +43,7 @@ export const budgetScreen: LocalizedPlural<typeof en> = {
     businessLoss: "убыток {{amount}} · не учитывается",
     businessAddIncome: "+ Доход",
     businessAddExpense: "+ Расход",
+    businessRentOwed: "Арендаторы должны {{amount}}",
     deletedPerson: "(удалённый человек)",
   },
   selection: {

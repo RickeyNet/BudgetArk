@@ -67,6 +67,8 @@ export const budgetInbox: Localized<typeof en> = {
     debtHint:
       "Loggas som en betalning på den här skulden - saldot och betalningshistoriken uppdateras på fliken Skulder, och budgeten räknar den under Skuldbetalningar. Ingen separat utgift skapas, och kategorin ovan används inte. Bocka i ”Gör alltid så” nedan så loggas framtida betalningar till den här handlaren på skulden utan att stanna här.",
     businessLabel: "FÖRETAG",
+    tenantLabel: "HYRA FRÅN HYRESGÄST",
+    tenantNone: "Inte hyra",
     personal: "Privat",
     peopleLabel: "PERSONER",
     unassigned: "Ej tilldelad",

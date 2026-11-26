@@ -105,6 +105,7 @@ import {
   adjustAssetAccountBalances,
 } from "../storage/assetAccountStorage";
 import { useBusinesses, usePeople } from "../people/PeopleProvider";
+import { buildRentRoll } from "../utils/tenants";
 import {
   getCategoryBucketOverrides,
   removeCategoryBucketOverride,
@@ -675,6 +676,16 @@ const BudgetScreen: React.FC = () => {
     () => new Map(businesses.map((business) => [business.id, business.name])),
     [businesses]
   );
+  // Rent tenants still owe each rental business, as of today (not the
+  // viewed month) - shown under the business's line. See utils/tenants.
+  const rentOwedByBusiness = useMemo(() => {
+    const owed = new Map<string, number>();
+    for (const business of businesses) {
+      if (!business.tenants?.length) continue;
+      owed.set(business.id, buildRentRoll(business, entries).totalOutstanding);
+    }
+    return owed;
+  }, [businesses, entries]);
   /** Earner line whose paychecks are showing underneath it. */
   const [expandedIncomeId, setExpandedIncomeId] = useState<string | null>(null);
 
@@ -1615,6 +1626,15 @@ const BudgetScreen: React.FC = () => {
                           </Text>
                         </TouchableOpacity>
                       ))}
+                      {(rentOwedByBusiness.get(line.businessId) ?? 0) > 0 ? (
+                        <Text style={[styles.incomeSummaryTag, { color: colors.danger }]}>
+                          {t("budget.screen.summary.businessRentOwed", {
+                            amount: formatCurrency(
+                              rentOwedByBusiness.get(line.businessId) ?? 0
+                            ),
+                          })}
+                        </Text>
+                      ) : null}
                       {/* Add straight to this business - the manual path's
                           answer to the Review Inbox's business picker. */}
                       <View style={styles.businessAddRow}>

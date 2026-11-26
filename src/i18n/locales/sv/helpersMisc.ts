@@ -64,6 +64,7 @@ export const helpersMisc: Localized<typeof en> = {
     nameRequired: "Ange ett företagsnamn.",
     limit: "Du kan ha upp till {{max}} företag.",
     notFound: "Företaget hittades inte.",
+    tenantsInvalid: "Det gick inte att spara hyresgästerna. Kontrollera uppgifterna och försök igen.",
   },
   pin: {
     incorrect: "Fel PIN-kod - försök igen",

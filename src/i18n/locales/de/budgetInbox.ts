@@ -67,6 +67,8 @@ export const budgetInbox: Localized<typeof en> = {
     debtHint:
       "Wird als Zahlung auf diese Schuld gebucht - Saldo und Zahlungsverlauf aktualisieren sich im Schulden-Tab, und das Budget zählt sie unter Schuldentilgung. Es entsteht keine separate Ausgabe, und die Kategorie oben wird nicht verwendet. Hake unten „Immer so machen“ an, dann werden künftige Zahlungen an diesen Händler direkt auf die Schuld gebucht, ohne hier zu stoppen.",
     businessLabel: "UNTERNEHMEN",
+    tenantLabel: "MIETE VON MIETER",
+    tenantNone: "Keine Miete",
     personal: "Privat",
     peopleLabel: "PERSONEN",
     unassigned: "Nicht zugewiesen",

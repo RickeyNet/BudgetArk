@@ -41,6 +41,8 @@ import {
   nearbyManualPayments,
 } from "../../utils/inboxDebtPayments";
 import { roundToCents } from "../../utils/money";
+import { getBusinesses } from "../../storage/businessStorage";
+import { resolveTenantId } from "../../utils/tenants";
 import {
   forgetLedgerDecision,
   getIngestLedger,
@@ -94,6 +96,14 @@ export interface ApproveOptions {
    * personal; undefined = fall back to the item's rule-suggested business.
    */
   businessId?: string | null;
+  /**
+   * Tenant of that business this deposit is rent from (see
+   * BudgetEntry.tenantId / utils/tenants). Deposits only, never a refund,
+   * and only kept when the tenant really belongs to the business.
+   * `null`/undefined = inherit the tenant of the recurring income the
+   * deposit is filed against, if any. Never remembered on a merchant rule.
+   */
+  tenantId?: string | null;
   /**
    * People to assign the entry to (expenses only) - one or many, see
    * utils/entryPeople. `null` (or `[]`) = explicitly nobody; undefined =
@@ -220,6 +230,18 @@ export const approvePendingTransaction = async (
         : [],
   );
   const lentTo = type === "expense" ? normalizeLentTo(opts.lentTo) : undefined;
+  // Rent from a tenant: the picked one, else the tenant of the recurring
+  // rent this deposit stands in for - validated against the business.
+  let tenantId: string | undefined;
+  if (businessId && type === "income" && !refund) {
+    const wanted =
+      opts.tenantId ??
+      (fulfilled?.businessId === businessId ? fulfilled.tenantId : undefined);
+    if (wanted) {
+      const business = (await getBusinesses()).find((b) => b.id === businessId);
+      tenantId = resolveTenantId(wanted, business, { type });
+    }
+  }
   const entry: BudgetEntry = {
     id: generateUUID(),
     type,
@@ -234,6 +256,7 @@ export const approvePendingTransaction = async (
     externalTxId: item.id,
     merchant: item.merchant || undefined,
     businessId,
+    ...(tenantId ? { tenantId } : {}),
     ...people,
     fulfillsRecurringId,
     lentTo,

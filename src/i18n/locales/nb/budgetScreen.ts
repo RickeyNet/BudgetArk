@@ -40,6 +40,7 @@ export const budgetScreen: Localized<typeof en> = {
     businessLoss: "{{amount}} i tap · telles ikke",
     businessAddIncome: "+ Inntekt",
     businessAddExpense: "+ Utgift",
+    businessRentOwed: "Leietakere skylder {{amount}}",
     deletedPerson: "(slettet person)",
   },
   selection: {

@@ -165,6 +165,12 @@ export const budgetEntry: Localized<typeof en> = {
     personal: "Privat",
     deleted: "💼 (gelöschtes Unternehmen)",
   },
+  tenant: {
+    label: "MIETE VON MIETER",
+    hint: "Zählt als Mietzahlung und verringert, was dieser Mieter schuldet.",
+    hintRecurring: "Nur erwartete Miete. Was der Mieter schuldet, ändert sich erst, wenn eine tatsächliche Zahlung erfasst wird.",
+    none: "Keine Miete",
+  },
   people: {
     label: "PERSONEN (OPTIONAL)",
     hint: "Für wen war das? Wähl eine Person oder alle, die es geteilt haben - beim Einkauf die ganze Familie. Geteilte Ausgaben werden in Personenberichten gleichmäßig aufgeteilt.",

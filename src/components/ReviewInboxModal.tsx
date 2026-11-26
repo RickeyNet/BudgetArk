@@ -58,6 +58,7 @@ import type {
 } from "../types";
 import { describeError } from "../utils/errorMessage";
 import TagPillPicker, { MultiTagPillPicker } from "./TagPillPicker";
+import { businessTenants } from "../utils/tenants";
 import { entryPersonIds, formatPersonNames } from "../utils/entryPeople";
 import { LENT_TO_MAX_LENGTH, lentToSuggestions } from "../utils/loans";
 import { useTheme } from "../theme/ThemeProvider";
@@ -241,6 +242,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [draftBusinessId, setDraftBusinessId] = useState<string | undefined>(
     undefined,
   );
+  // Deposits only: which tenant of the picked business this rent is from.
+  const [draftTenantId, setDraftTenantId] = useState<string | undefined>(
+    undefined,
+  );
   // Multi-select, like the entry form: a grocery run is the whole family's.
   const [draftPersonIds, setDraftPersonIds] = useState<string[]>([]);
   // Either a recurring bill's entry id or a debt pill ("debt:<id>", see
@@ -400,6 +405,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       setDraftName(item.suggestedName ?? item.description);
       // Either direction: a client's payment is the business's income.
       setDraftBusinessId(item.suggestedBusinessId);
+      setDraftTenantId(undefined);
       setDraftPersonIds(
         item.suggestedType === "expense"
           ? entryPersonIds({
@@ -447,6 +453,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         const pickedBusinessId = picked.businessId;
         setDraftBusinessId((prev) => prev ?? pickedBusinessId);
       }
+      // Recurring rent tagged to a tenant: the deposit is their payment.
+      if (picked?.tenantId) {
+        const pickedTenantId = picked.tenantId;
+        setDraftTenantId((prev) => prev ?? pickedTenantId);
+      }
     },
     [entries],
   );
@@ -462,6 +473,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       recurringId: string | undefined,
       lentTo: string,
       refund = false,
+      tenantId?: string,
     ) => {
       setBusyId(item.id);
       setActionError(null);
@@ -477,6 +489,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           personIds: personIds.length > 0 ? personIds : null,
           fulfillsRecurringId: recurringId ?? null,
           lentTo: lentTo.trim() || null,
+          tenantId: tenantId ?? null,
           refund,
           rememberRule: remember,
         });
@@ -875,6 +888,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     // and saves no rule, so those two controls are hidden and ignored.
     const isRefund = expanded && !isExpense && draftRefund;
     const remembering = rememberRule && !isRefund;
+    // Rent from a tenant: a deposit into a business that has tenants.
+    const draftTenantOptions =
+      expanded && !isExpense && !isRefund
+        ? businessTenants(businesses.find((b) => b.id === draftBusinessId))
+        : [];
+    const showTenantPicker = draftTenantOptions.length > 0;
     // Statement-file rows have no ExternalAccountLink to name them; their
     // label is carried in the account id (utils/bankCsvImport).
     const accountName =
@@ -1157,6 +1176,18 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   />
               </>
             ) : null}
+            {showTenantPicker ? (
+              <>
+                <Text style={styles.label}>{t("budget.inbox.form.tenantLabel")}</Text>
+                <TagPillPicker
+                    options={draftTenantOptions}
+                    value={draftTenantId}
+                    onChange={setDraftTenantId}
+                    noneLabel={t("budget.inbox.form.tenantNone")}
+                    glyph="🔑"
+                  />
+              </>
+            ) : null}
             {applyToOptions.length > 0 && !isRefund ? (
               <>
                 <TouchableOpacity
@@ -1332,6 +1363,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                         isRefund ? undefined : draftRecurringId,
                         draftLentTo,
                         isRefund,
+                        showTenantPicker ? draftTenantId : undefined,
                       ))
                 }
                 disabled={busy}
@@ -1666,6 +1698,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 draftCategory,
                 draftName,
                 draftBusinessId,
+                draftTenantId,
                 draftPersonIds,
                 draftLentTo,
                 rememberRule,

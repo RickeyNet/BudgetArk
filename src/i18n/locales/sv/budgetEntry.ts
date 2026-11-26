@@ -165,6 +165,12 @@ export const budgetEntry: Localized<typeof en> = {
     personal: "Privat",
     deleted: "💼 (borttaget företag)",
   },
+  tenant: {
+    label: "HYRA FRÅN HYRESGÄST",
+    hint: "Räknas som en hyresbetalning och minskar det hyresgästen är skyldig.",
+    hintRecurring: "Endast förväntad hyra. Det hyresgästen är skyldig ändras när en faktisk betalning registreras.",
+    none: "Inte hyra",
+  },
   people: {
     label: "PERSONER (VALFRITT)",
     hint: "Vem var det här för? Välj en person, eller alla som delade på det - hela familjen för matvaror. Delade utgifter fördelas jämnt i rapporter per person.",

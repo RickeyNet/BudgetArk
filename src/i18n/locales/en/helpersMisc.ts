@@ -63,6 +63,7 @@ export const helpersMisc = {
     nameRequired: "Enter a business name.",
     limit: "You can have up to {{max}} businesses.",
     notFound: "Business not found.",
+    tenantsInvalid: "Couldn't save the tenants. Check the details and try again.",
   },
   pin: {
     incorrect: "Incorrect PIN - try again",

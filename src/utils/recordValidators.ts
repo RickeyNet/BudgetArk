@@ -25,6 +25,7 @@ import {
   LOAN_REPAYMENT_NOTE_MAX_LENGTH,
   MAX_LOAN_REPAYMENTS,
 } from "./loans";
+import { isTenantsValue } from "./tenants";
 
 export const VALIDATOR_LIMITS = {
   MAX_TEXT_LENGTH: 120,
@@ -277,6 +278,10 @@ export const isBudgetEntryItem = (
   // its business passed, or one entry bricks the whole sync diff.
   const businessIdValid =
     item.businessId === undefined || isSafeText(item.businessId, 120);
+  // Rent-payment tag (BudgetEntry.tenantId) - an id inside the business's
+  // tenant list, same cap as the other ids.
+  const tenantIdValid =
+    item.tenantId === undefined || isSafeText(item.tenantId, 120);
   // Same contract as businessId, for the person assignment.
   const personIdValid =
     item.personId === undefined || isSafeText(item.personId, 120);
@@ -342,6 +347,7 @@ export const isBudgetEntryItem = (
     externalTxIdValid &&
     merchantValid &&
     businessIdValid &&
+    tenantIdValid &&
     personIdValid &&
     personIdsValid &&
     incomeTypeValid &&
@@ -414,6 +420,9 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
   }
   if (item.businessId !== undefined && !isSafeText(item.businessId, 120)) {
     return '"businessId" must be a non-empty string of at most 120 characters when present';
+  }
+  if (item.tenantId !== undefined && !isSafeText(item.tenantId, 120)) {
+    return '"tenantId" must be a non-empty string of at most 120 characters when present';
   }
   if (item.personId !== undefined && !isSafeText(item.personId, 120)) {
     return '"personId" must be a non-empty string of at most 120 characters when present';
@@ -554,6 +563,9 @@ export const isBusinessItem = (
   return (
     isSafeText(item.id) &&
     isSafeText(item.name, 40) &&
+    // Tenants ride on the business record (Business.tenants): bounded and
+    // shape-checked here so a hostile peer can't ship an unbounded list.
+    isTenantsValue(item.tenants) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&
     isOptionalIso(item.deletedAt)

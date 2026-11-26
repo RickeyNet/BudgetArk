@@ -41,6 +41,7 @@ export const budgetScreen = {
     businessLoss: "{{amount}} loss · not counted",
     businessAddIncome: "+ Income",
     businessAddExpense: "+ Expense",
+    businessRentOwed: "Tenants owe {{amount}}",
     deletedPerson: "(deleted person)",
   },
   selection: {

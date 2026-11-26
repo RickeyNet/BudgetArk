@@ -65,6 +65,8 @@ export const budgetInbox = {
     debtHint:
       "Logged as a payment on this debt - its balance and payment history update on the Debts tab, and the Budget counts it under Debt Payments. No separate expense is created, and the category above is not used. Tick \"Always do this\" below and future payments to this merchant are logged on the debt without stopping here.",
     businessLabel: "BUSINESS",
+    tenantLabel: "RENT FROM TENANT",
+    tenantNone: "Not rent",
     personal: "Personal",
     peopleLabel: "PEOPLE",
     unassigned: "Unassigned",

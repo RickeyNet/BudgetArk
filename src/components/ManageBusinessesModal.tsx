@@ -16,6 +16,9 @@
  * onOpenReport shortcut row at the top lets the Profile tab show a single
  * Businesses row. The parent closes this sheet before presenting the
  * report (one Modal at a time).
+ *
+ * A business's tenants (rent roll - see BusinessTenantsPanel) open INSIDE
+ * this sheet, swapping out the list, for the same one-Modal reason.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -34,10 +37,13 @@ import type { DensityTokens } from "../theme/density";
 import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
-import type { Business } from "../types";
+import type { BudgetEntry, Business } from "../types";
 import { MAX_BUSINESS_NAME_LENGTH } from "../types";
 import { useBusinesses } from "../people/PeopleProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
+import { useCurrency } from "../currency/CurrencyProvider";
+import { buildRentRoll } from "../utils/tenants";
+import BusinessTenantsPanel from "./BusinessTenantsPanel";
 
 interface ManageBusinessesModalProps {
   visible: boolean;
@@ -58,27 +64,39 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
   const sheet = useSheetStyles();
 
   const { businesses, addBusiness, updateBusiness, deleteBusiness } = useBusinesses();
-  const [entryCounts, setEntryCounts] = useState<Record<string, number>>({});
+  const { formatCurrency } = useCurrency();
+  const [entries, setEntries] = useState<BudgetEntry[]>([]);
+  /** Business whose tenants panel replaces the list; null = the list. */
+  const [tenantsFor, setTenantsFor] = useState<string | null>(null);
   const [name, setName] = useState("");
   /** Business id being renamed; null = the form adds a new business. */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const entryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const entry of entries) {
+      if (entry.businessId) {
+        counts[entry.businessId] = (counts[entry.businessId] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [entries]);
+
+  /** Re-read after the tenants panel logs a payment. */
+  const reloadEntries = useCallback(async () => {
+    setEntries(await getBudgetEntries());
+  }, []);
+
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
     void (async () => {
       try {
-        const entries = await getBudgetEntries();
+        const stored = await getBudgetEntries();
         if (cancelled) return;
-        const counts: Record<string, number> = {};
-        for (const entry of entries) {
-          if (entry.businessId) {
-            counts[entry.businessId] = (counts[entry.businessId] ?? 0) + 1;
-          }
-        }
-        setEntryCounts(counts);
+        setEntries(stored);
       } catch (error) {
         if (cancelled) return;
         setError(describeError(error, t("modals.people.businesses.errors.load")));
@@ -97,6 +115,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
 
   const handleClose = useCallback(() => {
     resetForm();
+    setTenantsFor(null);
     onClose();
   }, [onClose, resetForm]);
 
@@ -162,6 +181,11 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
   );
 
   const canSubmit = name.trim().length > 0 && !saving;
+  // Resolved from the live list so the panel follows its own saves (and
+  // falls back to the list if the business is deleted from under it).
+  const tenantsBusiness = tenantsFor
+    ? businesses.find((business) => business.id === tenantsFor)
+    : undefined;
 
   return (
     <SheetModal
@@ -177,6 +201,15 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
         </>
       }
     >
+      {tenantsBusiness ? (
+        <BusinessTenantsPanel
+          business={tenantsBusiness}
+          entries={entries}
+          onEntriesChanged={reloadEntries}
+          onBack={() => setTenantsFor(null)}
+        />
+      ) : (
+        <>
             <Text style={sheet.title}>{t("modals.people.businesses.title")}</Text>
             <Text style={sheet.subtitle}>{t("modals.people.businesses.subtitle")}</Text>
 
@@ -254,6 +287,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
             ) : (
               businesses.map((business) => {
                 const count = entryCounts[business.id] ?? 0;
+                const rentOwed = buildRentRoll(business, entries).totalOutstanding;
                 return (
                   <View key={business.id} style={styles.row}>
                     <Text style={styles.rowIcon}>💼</Text>
@@ -266,7 +300,25 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
                           ? t("modals.people.businesses.noEntries")
                           : t("modals.people.businesses.entries", { count })}
                       </Text>
+                      {rentOwed > 0 ? (
+                        <Text style={styles.rowOwed}>
+                          {t("modals.people.businesses.tenantsOwed", {
+                            amount: formatCurrency(rentOwed),
+                          })}
+                        </Text>
+                      ) : null}
                     </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        resetForm();
+                        setTenantsFor(business.id);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("modals.people.businesses.tenantsA11y", { name: business.name })}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.rowRename}>{t("modals.people.businesses.tenantsLink")}</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleStartRename(business)}
                       accessibilityRole="button"
@@ -287,6 +339,8 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
                 );
               })
             )}
+        </>
+      )}
     </SheetModal>
   );
 };
@@ -398,6 +452,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     rowCount: {
       color: colors.textMuted,
       fontSize: scale(12),
+      marginTop: 2,
+    },
+    rowOwed: {
+      color: colors.danger,
+      fontSize: scale(12),
+      fontWeight: "600",
       marginTop: 2,
     },
     rowRename: {

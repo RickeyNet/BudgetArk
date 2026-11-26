@@ -165,6 +165,12 @@ export const budgetEntry: Localized<typeof en> = {
     personal: "Personlig",
     deleted: "💼 (slettet bedrift)",
   },
+  tenant: {
+    label: "LEIE FRA LEIETAKER",
+    hint: "Teller som en leiebetaling og reduserer det denne leietakeren skylder.",
+    hintRecurring: "Kun forventet leie. Det leietakeren skylder endres når en faktisk betaling registreres.",
+    none: "Ikke leie",
+  },
   people: {
     label: "PERSONER (VALGFRITT)",
     hint: "Hvem var dette for? Velg én person, eller alle som delte på det - hele familien for dagligvarer. Delte utgifter fordeles likt i rapporter per person.",

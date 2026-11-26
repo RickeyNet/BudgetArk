@@ -91,6 +91,7 @@ export const helpersMisc: LocalizedPlural<typeof en> = {
     nameRequired: "Введи назву бізнесу.",
     limit: "Можна додати до {{max}} бізнесів.",
     notFound: "Бізнес не знайдено.",
+    tenantsInvalid: "Не вдалося зберегти орендарів. Перевір дані та спробуй ще раз.",
   },
   pin: {
     incorrect: "Неправильний PIN - спробуй ще раз",

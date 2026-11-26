@@ -220,6 +220,16 @@ export const CUSTOM_CATEGORY_STORAGE_VERSION = 1;
 export interface Business {
   id: string;
   name: string;
+  /**
+   * Tenants renting from this business (a rental property). Each carries
+   * its monthly rent; what a tenant still owes is derived from that rent
+   * and the income entries tagged to them (`BudgetEntry.tenantId`) - see
+   * utils/tenants. Lives ON the business record so it rides sync, backups
+   * and older peers (which keep unknown fields) with no new collection;
+   * the price is whole-record last-write-wins when two phones edit the
+   * same business's tenants before syncing. Optional; absent = none.
+   */
+  tenants?: Tenant[];
   createdAt: string;
   updatedAt: string;
   /** Tombstone marker - see Debt.deletedAt. */
@@ -229,6 +239,38 @@ export interface Business {
 export const BUSINESS_STORAGE_VERSION = 1;
 export const MAX_BUSINESSES = 20;
 export const MAX_BUSINESS_NAME_LENGTH = 40;
+
+/** A monthly rent amount and the first month (YYYY-MM) it applies to. */
+export interface RentTerm {
+  from: string;
+  amount: number;
+}
+
+/**
+ * Someone renting from a business. Rent is charged once per month from the
+ * first term's month, on `dueDay`, until `endMonth`. Nothing about the
+ * balance is stored - it is always rent charged minus payments received.
+ */
+export interface Tenant {
+  id: string;
+  name: string;
+  /**
+   * Rent over time, oldest first, never empty. A rent increase is a new
+   * term, so months already charged keep the rent they were charged at.
+   */
+  rents: RentTerm[];
+  /** Day of month rent falls due (1-31, clamped in short months). Absent = 1. */
+  dueDay?: number;
+  /** Rent already owed before the first tracked month. Absent = 0. */
+  openingBalance?: number;
+  /** Last month (YYYY-MM) rent is charged - set when the tenant moves out. */
+  endMonth?: string;
+  createdAt: string;
+}
+
+export const MAX_TENANTS_PER_BUSINESS = 20;
+export const MAX_TENANT_NAME_LENGTH = 40;
+export const MAX_RENT_TERMS = 60;
 
 /**
  * A household member (or anyone else) spending can be assigned to via
@@ -422,6 +464,16 @@ export interface BudgetEntry {
    * harmless: report/badge surfaces show it as "(deleted business)".
    */
   businessId?: string;
+  /**
+   * Tenant of `businessId` this income is rent from (see `Tenant`). A
+   * one-off income entry carrying it is a rent PAYMENT and reduces what
+   * the tenant owes (utils/tenants); on a recurring income entry it is
+   * only a label that linked deposits inherit. Income only, and only
+   * meaningful together with `businessId`. A dangling id (tenant removed)
+   * is harmless - the entry is still the business's income. Optional;
+   * older peers ignore it.
+   */
+  tenantId?: string;
   /**
    * Person this entry is assigned to (see `Person`). On an expense: "who
    * spent this", same contract as `businessId` (cleared when the type

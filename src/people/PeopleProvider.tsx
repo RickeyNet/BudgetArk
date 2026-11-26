@@ -22,7 +22,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import type { Business, Person } from "../types";
+import type { Business, Person, Tenant } from "../types";
 import {
   addPerson as addPersonInStore,
   deletePerson as deletePersonInStore,
@@ -53,7 +53,10 @@ interface PeopleContextValue {
   deletePerson: (id: string) => Promise<void>;
   restorePerson: (id: string) => Promise<void>;
   addBusiness: (name: string) => Promise<BusinessMutationResult>;
-  updateBusiness: (id: string, patch: { name?: string }) => Promise<BusinessMutationResult>;
+  updateBusiness: (
+    id: string,
+    patch: { name?: string; tenants?: Tenant[] }
+  ) => Promise<BusinessMutationResult>;
   deleteBusiness: (id: string) => Promise<void>;
   restoreBusiness: (id: string) => Promise<void>;
 }
@@ -134,7 +137,7 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [refresh]
   );
   const updateBusiness = useCallback(
-    async (id: string, patch: { name?: string }) => {
+    async (id: string, patch: { name?: string; tenants?: Tenant[] }) => {
       const result = await updateBusinessInStore(id, patch);
       if (result.ok) await refresh();
       return result;

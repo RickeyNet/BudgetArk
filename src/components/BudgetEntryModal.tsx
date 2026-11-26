@@ -79,6 +79,7 @@ import TagPillPicker from "./TagPillPicker";
 import { useTheme } from "../theme/ThemeProvider";
 import { useBusinesses } from "../people/PeopleProvider";
 import { incomeTrackedBusinessIds } from "../utils/businessProfit";
+import { businessTenants } from "../utils/tenants";
 import type { ThemeColors } from "../theme/themes";
 import CategoryPillPicker from "./CategoryPillPicker";
 import MonthDayCalendar from "./MonthDayCalendar";
@@ -221,6 +222,8 @@ interface EntryFormState {
   paymentUrl: string;
   linkedAccountId: string | undefined;
   businessId: string | undefined;
+  /** Tenant this income is rent from (BudgetEntry.tenantId). */
+  tenantId: string | undefined;
   /** Everyone the expense was for - see utils/entryPeople. [] = unassigned. */
   personIds: string[];
   incomeType: IncomeType | undefined;
@@ -264,6 +267,7 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
   paymentUrl: entry?.paymentUrl ?? "",
   linkedAccountId: entry?.linkedAccountId,
   businessId: entry?.businessId,
+  tenantId: entry?.tenantId,
   personIds: entry ? entryPersonIds(entry) : [],
   incomeType: entry?.incomeType,
   retirementContribution:
@@ -330,6 +334,9 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const [businessId, setBusinessId] = useState<string | undefined>(
     initialForm.businessId
   );
+  const [tenantId, setTenantId] = useState<string | undefined>(
+    initialForm.tenantId
+  );
   // Inline "+ New business" form under the business picker.
   const [newBusinessOpen, setNewBusinessOpen] = useState(false);
   const [newBusinessName, setNewBusinessName] = useState("");
@@ -387,6 +394,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       setPaymentUrl(next.paymentUrl);
       setLinkedAccountId(next.linkedAccountId);
       setBusinessId(next.businessId);
+      setTenantId(next.tenantId);
       setPersonIds(next.personIds);
       setIncomeType(next.incomeType);
       setRetirementContribution(next.retirementContribution);
@@ -521,6 +529,20 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
   const { addBusiness } = useBusinesses();
 
+  // Rent from a tenant: offered on income for a business that has tenants
+  // (Profile -> Businesses -> Tenants). A tagged one-off is a rent payment
+  // and lowers what that tenant owes (utils/tenants).
+  const tenantOptions = useMemo(
+    () => businessTenants(businesses.find((b) => b.id === businessId)),
+    [businessId, businesses]
+  );
+  const showTenantPicker =
+    type === "income" && !isRefund && tenantOptions.length > 0;
+  const effectiveTenantId =
+    showTenantPicker && tenantOptions.some((option) => option.id === tenantId)
+      ? tenantId
+      : undefined;
+
   const closeNewBusiness = useCallback(() => {
     setNewBusinessOpen(false);
     setNewBusinessName("");
@@ -559,10 +581,15 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const handlePickRecurring = useCallback(
     (id: string | undefined) => {
       setFulfillsRecurringId(id);
-      const pickedBusinessId = id
-        ? entries.find((candidate) => candidate.id === id)?.businessId
+      const picked = id
+        ? entries.find((candidate) => candidate.id === id)
         : undefined;
+      const pickedBusinessId = picked?.businessId;
       if (pickedBusinessId) setBusinessId((prev) => prev ?? pickedBusinessId);
+      // Recurring rent tagged to a tenant: the deposit is that tenant's
+      // payment. Dropped at save if the business ends up different.
+      const pickedTenantId = picked?.tenantId;
+      if (pickedTenantId) setTenantId((prev) => prev ?? pickedTenantId);
     },
     [entries]
   );
@@ -647,6 +674,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setPaymentUrl(next.paymentUrl);
     setLinkedAccountId(next.linkedAccountId);
     setBusinessId(next.businessId);
+    setTenantId(next.tenantId);
     setPersonIds(next.personIds);
     setIncomeType(next.incomeType);
     setRetirementContribution(next.retirementContribution);
@@ -717,6 +745,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         paymentUrl: normalizedPaymentUrl,
         linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
         businessId,
+        tenantId: effectiveTenantId,
         ...personAssignmentFields(
           type === "expense"
             ? (showPersonPicker ? personIds : [])
@@ -764,6 +793,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     businessId,
     category,
     effectiveFulfillsRecurringId,
+    effectiveTenantId,
     incomePersonIds,
     incomeType,
     isPrivate,
@@ -817,6 +847,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
       // Kept across a type flip: income belongs to a business too.
       businessId,
+      // Income only, and only a tenant of the picked business.
+      tenantId: effectiveTenantId,
       // Expenses: who spent it. Income: the earner (or the earner of the
       // recurring income this deposit is filed against).
       ...personAssignmentFields(
@@ -857,6 +889,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     businessId,
     category,
     effectiveFulfillsRecurringId,
+    effectiveTenantId,
     entry,
     incomePersonIds,
     incomeType,
@@ -1689,6 +1722,23 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                   </Text>
                 </TouchableOpacity>
               </View>
+            </>
+          )}
+          {showTenantPicker && (
+            <>
+              <Text style={styles.label}>{t("budget.entry.tenant.label")}</Text>
+              <Text style={styles.accountPickerHint}>
+                {recurring
+                  ? t("budget.entry.tenant.hintRecurring")
+                  : t("budget.entry.tenant.hint")}
+              </Text>
+              <TagPillPicker
+                options={tenantOptions}
+                value={effectiveTenantId}
+                onChange={setTenantId}
+                noneLabel={t("budget.entry.tenant.none")}
+                glyph="🔑"
+              />
             </>
           )}
         </View>

@@ -501,6 +501,20 @@ describe("isBudgetEntryItem", () => {
     });
   });
 
+  describe("tenantId", () => {
+    it("accepts an entry with or without a tenantId", () => {
+      expect(isBudgetEntryItem({ ...valid, tenantId: "t1" })).toBe(true);
+      expect(isBudgetEntryItem(valid)).toBe(true);
+    });
+
+    it("rejects an empty, oversized, or non-string tenantId", () => {
+      expect(isBudgetEntryItem({ ...valid, tenantId: "" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, tenantId: "a".repeat(121) })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, tenantId: 7 })).toBe(false);
+      expect(explainBudgetEntryProblem({ ...valid, tenantId: 7 })).toContain("tenantId");
+    });
+  });
+
   describe("personId", () => {
     it("accepts an entry with or without a personId", () => {
       expect(isBudgetEntryItem({ ...valid, personId: "per1" })).toBe(true);
@@ -550,6 +564,28 @@ describe("isBusinessItem", () => {
 
   it("accepts a well-formed business", () => {
     expect(isBusinessItem(valid)).toBe(true);
+  });
+
+  it("accepts a business with well-formed tenants and rejects malformed ones", () => {
+    const tenant = {
+      id: "t1",
+      name: "Sam",
+      rents: [{ from: "2026-01", amount: 1200 }],
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(isBusinessItem({ ...valid, tenants: [tenant] })).toBe(true);
+    expect(isBusinessItem({ ...valid, tenants: [] })).toBe(true);
+    expect(isBusinessItem({ ...valid, tenants: "Sam" })).toBe(false);
+    expect(isBusinessItem({ ...valid, tenants: [{ ...tenant, rents: [] }] })).toBe(false);
+    expect(
+      isBusinessItem({ ...valid, tenants: [{ ...tenant, rents: [{ from: "soon", amount: 1 }] }] })
+    ).toBe(false);
+    expect(
+      isBusinessItem({
+        ...valid,
+        tenants: Array.from({ length: 21 }, (_, i) => ({ ...tenant, id: `t${i}` })),
+      })
+    ).toBe(false);
   });
 
   it("accepts a tombstoned business (deletes must ride sync)", () => {

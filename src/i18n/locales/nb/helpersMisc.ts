@@ -64,6 +64,7 @@ export const helpersMisc: Localized<typeof en> = {
     nameRequired: "Skriv inn et bedriftsnavn.",
     limit: "Du kan ha opptil {{max}} bedrifter.",
     notFound: "Fant ikke bedriften.",
+    tenantsInvalid: "Kunne ikke lagre leietakerne. Sjekk opplysningene og prøv igjen.",
   },
   pin: {
     incorrect: "Feil PIN-kode - prøv igjen",

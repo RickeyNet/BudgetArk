@@ -15,6 +15,7 @@ import { ensureUpdatedAt } from "../utils/recordTimestamps";
 import { clearAssigneesFromMerchantRules } from "./merchantRulesStorage";
 import {
   Business,
+  Tenant,
   BUSINESS_STORAGE_VERSION,
   MAX_BUSINESSES,
   MAX_BUSINESS_NAME_LENGTH,
@@ -29,6 +30,7 @@ import {
 import { sanitizeTextInput } from "../utils/sanitize";
 import { generateUUID } from "../utils/uuid";
 import { t } from "../i18n/translate";
+import { isTenantsValue } from "../utils/tenants";
 
 /** Also listed in debtStorage.RESET_KEYS - keep in lockstep. */
 const STORAGE_KEY = "@budgetark_businesses";
@@ -237,7 +239,7 @@ export const addBusiness = async (
 
 export const updateBusiness = async (
   id: string,
-  patch: { name?: string }
+  patch: { name?: string; tenants?: Tenant[] }
 ): Promise<BusinessMutationResult> => {
   const all = await readStore();
   const target = all.find((b) => b.id === id && !b.deletedAt);
@@ -250,9 +252,23 @@ export const updateBusiness = async (
     name = checked.name;
   }
 
-  const next = all.map((b) =>
-    b.id === id ? { ...b, name, updatedAt: new Date().toISOString() } : b
-  );
+  // The whole tenant list is replaced (callers build it with utils/tenants).
+  // Refused rather than trimmed when it would not pass the sync/import
+  // validator - a list this device accepts but a partner rejects would
+  // brick the business diff.
+  if (patch.tenants !== undefined && !isTenantsValue(patch.tenants)) {
+    return { ok: false, error: t("helpers.misc.businesses.tenantsInvalid") };
+  }
+
+  const next = all.map((b) => {
+    if (b.id !== id) return b;
+    const updated: Business = { ...b, name, updatedAt: new Date().toISOString() };
+    if (patch.tenants !== undefined) {
+      if (patch.tenants.length > 0) updated.tenants = patch.tenants;
+      else delete updated.tenants;
+    }
+    return updated;
+  });
   await writeStore(next);
   return { ok: true, businesses: filterLive(next) };
 };

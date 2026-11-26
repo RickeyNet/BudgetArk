@@ -67,6 +67,8 @@ export const budgetInbox: Localized<typeof en> = {
     debtHint:
       "Logges som en betaling på denne gjeldsposten - saldoen og betalingshistorikken oppdateres på Gjeld-fanen, og budsjettet teller den under Gjeldsbetalinger. Ingen separat utgift opprettes, og kategorien over brukes ikke. Huk av «Gjør alltid dette» nedenfor, så logges fremtidige betalinger til denne forhandleren på gjeldsposten uten å stoppe her.",
     businessLabel: "BEDRIFT",
+    tenantLabel: "LEIE FRA LEIETAKER",
+    tenantNone: "Ikke leie",
     personal: "Personlig",
     peopleLabel: "PERSONER",
     unassigned: "Ikke tilordnet",

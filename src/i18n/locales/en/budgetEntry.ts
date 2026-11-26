@@ -163,6 +163,12 @@ export const budgetEntry = {
     personal: "Personal",
     deleted: "💼 (deleted business)",
   },
+  tenant: {
+    label: "RENT FROM TENANT",
+    hint: "Counts as a rent payment and lowers what this tenant owes.",
+    hintRecurring: "Expected rent only. What the tenant owes changes when an actual payment is logged.",
+    none: "Not rent",
+  },
   people: {
     label: "PEOPLE (OPTIONAL)",
     hint: "Who was this for? Pick one person, or everyone it was shared by - the whole family for groceries. Shared spending splits evenly in per-person reports.",
