@@ -22,6 +22,7 @@ export const modalsPeople = {
       recordFailedReopen: "Couldn't record that payment - reopen and try again.",
       recordFailed: "Couldn't record the payment.",
       removeFailed: "Couldn't remove the payment.",
+      removeLoanFailed: "Couldn't remove the loan.",
     },
     loanMeta: "{{date}} · lent {{amount}}",
     repaidBack: "{{amount}} back",
@@ -30,6 +31,13 @@ export const modalsPeople = {
     removeRepaymentA11y: "Remove the {{amount}} payment",
     logPaymentA11y: "Log a payment from {{name}}",
     borrowerFallback: "the borrower",
+    removeLoanA11y: "Remove the loan \"{{title}}\"",
+    removeConfirm: {
+      title: "Remove this loan?",
+      message: "\"{{title}}\" ({{amount}}) will come off Owed to You, along with any payments recorded on it. You can delete the expense from your budget as well, or keep it there as an ordinary expense.",
+      keepExpense: "Keep expense",
+      deleteExpense: "Delete expense",
+    },
     logPayment: "Log payment",
     form: {
       amount: "AMOUNT",

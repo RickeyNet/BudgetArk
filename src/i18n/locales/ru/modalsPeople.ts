@@ -23,6 +23,7 @@ export const modalsPeople: LocalizedPlural<typeof en> = {
       recordFailedReopen: "Не удалось записать платёж - открой окно заново и попробуй ещё раз.",
       recordFailed: "Не удалось записать платёж.",
       removeFailed: "Не удалось удалить платёж.",
+      removeLoanFailed: "Не удалось убрать заём.",
     },
     loanMeta: "{{date}} · одолжено {{amount}}",
     repaidBack: "{{amount}} возвращено",
@@ -31,6 +32,13 @@ export const modalsPeople: LocalizedPlural<typeof en> = {
     removeRepaymentA11y: "Удалить платёж {{amount}}",
     logPaymentA11y: "Записать платёж от {{name}}",
     borrowerFallback: "заёмщика",
+    removeLoanA11y: "Убрать заём «{{title}}»",
+    removeConfirm: {
+      title: "Убрать этот заём?",
+      message: "«{{title}}» ({{amount}}) исчезнет из списка «Тебе должны» вместе с записанными по нему платежами. Расход можно также удалить из бюджета или оставить как обычный расход.",
+      keepExpense: "Оставить расход",
+      deleteExpense: "Удалить расход",
+    },
     logPayment: "Записать платёж",
     form: {
       amount: "СУММА",

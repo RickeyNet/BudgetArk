@@ -5,14 +5,16 @@
  * The money-lent-out tracker under Profile → People: every expense marked
  * "lent to" someone (BudgetEntry.lentTo), grouped by borrower with what
  * they still owe, and a "Log payment" form per loan that records what
- * came back (BudgetEntry.loanRepayments). Sibling of PersonReportModal.
+ * came back (BudgetEntry.loanRepayments), plus "Remove" to take a loan
+ * off the list (delete the expense, or keep it as an ordinary expense).
+ * Sibling of PersonReportModal.
  * Loads its own entries on open; the arithmetic and grouping live in
  * utils/loans, the writes go through budgetStorage's queued mutators so
  * two quick taps can't overpay a loan.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
@@ -22,8 +24,10 @@ import type { DensityTokens } from "../theme/density";
 import { useCurrency } from "../currency/CurrencyProvider";
 import {
   addLoanRepaymentToEntry,
+  deleteBudgetEntry,
   getBudgetEntries,
   removeLoanRepaymentFromEntry,
+  updateBudgetEntry,
 } from "../storage/budgetStorage";
 import {
   buildLoanLedger,
@@ -192,6 +196,61 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
     [busy, reload, t]
   );
 
+  /**
+   * Take a loan off the list. The loan IS an expense entry, so the user
+   * picks what happens to it: delete the expense (soft-delete, syncs), or
+   * keep it as an ordinary expense with the loan mark and its repayments
+   * cleared - the same result as clearing "Lent to" in the entry form.
+   */
+  const handleRemoveLoan = useCallback(
+    (line: LoanLine, title: string) => {
+      const run = (deleteExpense: boolean) => {
+        void (async () => {
+          if (busy) return;
+          setBusy(true);
+          setError(null);
+          try {
+            if (deleteExpense) await deleteBudgetEntry(line.entry.id);
+            else {
+              await updateBudgetEntry(line.entry.id, {
+                lentTo: undefined,
+                loanRepayments: undefined,
+              });
+            }
+            if (formLoanId === line.entry.id) setFormLoanId(null);
+            await reload();
+            triggerHaptic("selection");
+          } catch (err) {
+            triggerHaptic("error");
+            setError(describeError(err, t("modals.people.loans.errors.removeLoanFailed")));
+          } finally {
+            setBusy(false);
+          }
+        })();
+      };
+      Alert.alert(
+        t("modals.people.loans.removeConfirm.title"),
+        t("modals.people.loans.removeConfirm.message", {
+          title,
+          amount: formatCurrency(line.entry.amount),
+        }),
+        [
+          { text: t("common.cancel"), style: "cancel" },
+          {
+            text: t("modals.people.loans.removeConfirm.keepExpense"),
+            onPress: () => run(false),
+          },
+          {
+            text: t("modals.people.loans.removeConfirm.deleteExpense"),
+            style: "destructive",
+            onPress: () => run(true),
+          },
+        ]
+      );
+    },
+    [busy, formLoanId, formatCurrency, reload, t]
+  );
+
   const renderLoan = (line: LoanLine) => {
     const { entry } = line;
     const formOpen = formLoanId === entry.id;
@@ -248,6 +307,19 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
             accessibilityLabel={t("modals.people.loans.logPaymentA11y", { name: entry.lentTo ?? t("modals.people.loans.borrowerFallback") })}
           >
             <Text style={styles.secondaryButtonText}>{t("modals.people.loans.logPayment")}</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {!formOpen ? (
+          <TouchableOpacity
+            style={styles.removeLoan}
+            onPress={() => handleRemoveLoan(line, title)}
+            disabled={busy}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={t("modals.people.loans.removeLoanA11y", { title })}
+          >
+            <Text style={styles.removeLoanText}>{t("common.remove")}</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -424,6 +496,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       color: colors.danger,
       fontSize: 13,
       marginBottom: tokens.gapSm,
+    },
+    removeLoan: { alignSelf: "flex-end", marginTop: tokens.gapSm },
+    removeLoanText: {
+      color: colors.danger,
+      fontSize: 13,
+      fontWeight: "600",
     },
     totalCard: {
       backgroundColor: colors.card,

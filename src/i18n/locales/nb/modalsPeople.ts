@@ -22,6 +22,7 @@ export const modalsPeople: Localized<typeof en> = {
       recordFailedReopen: "Kunne ikke registrere betalingen - åpne igjen og prøv på nytt.",
       recordFailed: "Kunne ikke registrere betalingen.",
       removeFailed: "Kunne ikke fjerne betalingen.",
+      removeLoanFailed: "Kunne ikke fjerne lånet.",
     },
     loanMeta: "{{date}} · utlånt {{amount}}",
     repaidBack: "{{amount}} tilbake",
@@ -30,6 +31,13 @@ export const modalsPeople: Localized<typeof en> = {
     removeRepaymentA11y: "Fjern betalingen på {{amount}}",
     logPaymentA11y: "Logg en betaling fra {{name}}",
     borrowerFallback: "låntakeren",
+    removeLoanA11y: "Fjern lånet «{{title}}»",
+    removeConfirm: {
+      title: "Fjerne dette lånet?",
+      message: "«{{title}}» ({{amount}}) fjernes fra Til gode, sammen med betalingene som er registrert på det. Du kan også slette utgiften fra budsjettet, eller beholde den som en vanlig utgift.",
+      keepExpense: "Behold utgiften",
+      deleteExpense: "Slett utgiften",
+    },
     logPayment: "Logg betaling",
     form: {
       amount: "BELØP",

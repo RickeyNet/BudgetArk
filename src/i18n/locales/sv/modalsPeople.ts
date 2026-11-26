@@ -22,6 +22,7 @@ export const modalsPeople: Localized<typeof en> = {
       recordFailedReopen: "Kunde inte registrera betalningen - öppna igen och försök på nytt.",
       recordFailed: "Kunde inte registrera betalningen.",
       removeFailed: "Kunde inte ta bort betalningen.",
+      removeLoanFailed: "Det gick inte att ta bort lånet.",
     },
     loanMeta: "{{date}} · utlånat {{amount}}",
     repaidBack: "{{amount}} tillbaka",
@@ -30,6 +31,13 @@ export const modalsPeople: Localized<typeof en> = {
     removeRepaymentA11y: "Ta bort betalningen på {{amount}}",
     logPaymentA11y: "Logga en betalning från {{name}}",
     borrowerFallback: "låntagaren",
+    removeLoanA11y: "Ta bort lånet ”{{title}}”",
+    removeConfirm: {
+      title: "Ta bort det här lånet?",
+      message: "”{{title}}” ({{amount}}) tas bort från Att få tillbaka, tillsammans med betalningarna som registrerats på det. Du kan också ta bort utgiften från budgeten, eller behålla den som en vanlig utgift.",
+      keepExpense: "Behåll utgiften",
+      deleteExpense: "Ta bort utgiften",
+    },
     logPayment: "Logga betalning",
     form: {
       amount: "BELOPP",

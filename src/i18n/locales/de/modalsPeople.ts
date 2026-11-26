@@ -22,6 +22,7 @@ export const modalsPeople: Localized<typeof en> = {
       recordFailedReopen: "Zahlung konnte nicht gespeichert werden – erneut öffnen und nochmal versuchen.",
       recordFailed: "Zahlung konnte nicht gespeichert werden.",
       removeFailed: "Zahlung konnte nicht entfernt werden.",
+      removeLoanFailed: "Das Darlehen konnte nicht entfernt werden.",
     },
     loanMeta: "{{date}} · {{amount}} verliehen",
     repaidBack: "{{amount}} zurück",
@@ -30,6 +31,13 @@ export const modalsPeople: Localized<typeof en> = {
     removeRepaymentA11y: "Zahlung über {{amount}} entfernen",
     logPaymentA11y: "Zahlung von {{name}} eintragen",
     borrowerFallback: "der Person",
+    removeLoanA11y: "Darlehen „{{title}}“ entfernen",
+    removeConfirm: {
+      title: "Darlehen entfernen?",
+      message: "„{{title}}“ ({{amount}}) wird aus „Dir geschuldet“ entfernt, zusammen mit allen dazu erfassten Zahlungen. Du kannst die Ausgabe auch aus deinem Budget löschen oder sie als normale Ausgabe behalten.",
+      keepExpense: "Ausgabe behalten",
+      deleteExpense: "Ausgabe löschen",
+    },
     logPayment: "Zahlung eintragen",
     form: {
       amount: "BETRAG",
