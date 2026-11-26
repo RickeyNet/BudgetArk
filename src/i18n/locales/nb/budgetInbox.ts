@@ -133,6 +133,17 @@ export const budgetInbox: Localized<typeof en> = {
       stale: "Banken rapporterer ikke lenger denne ventende transaksjonen",
     },
   },
+  /** "Recently approved": bank entries approved lately, editable in place. */
+  approved: {
+    toggle: "Nylig godkjent · {{count}}",
+    title: "Nylig godkjent",
+    subtitle:
+      "Transaksjoner som er godkjent de siste {{days}} dagene - av deg, av en regel eller på partnerens telefon. Trykk på en for å endre navn, kategori, personer eller virksomhet; posten i budsjettet oppdateres med en gang. Transaksjoner som ble ført som gjeldsbetaling eller lagt til en kjøpsplan, vises ikke her.",
+    empty: "Ingenting godkjent nylig.",
+    when: "Godkjent {{date}}",
+    save: "Lagre endringer",
+    saving: "Lagrer...",
+  },
   notices: {
     syncSkipped_one:
       "{{count}} transaksjon ble hoppet over under denne synken - se Nylig hoppet over nedenfor.",
@@ -145,6 +156,7 @@ export const budgetInbox: Localized<typeof en> = {
   },
   errors: {
     restore: "Kunne ikke gjenopprette denne transaksjonen.",
+    change: "Kunne ikke lagre denne endringen.",
     load: "Kunne ikke laste inn innboksen.",
     approve: "Kunne ikke godkjenne denne transaksjonen.",
     skip: "Kunne ikke hoppe over denne transaksjonen.",

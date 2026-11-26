@@ -21,7 +21,11 @@
  * that left the inbox without becoming entries (Skip, an Always Skip rule,
  * a partner's decision, a sync match, a stale pending charge) with why and
  * a Restore button - so a sync that shrinks the inbox is never a mystery
- * (user report: "I clicked sync and lost items").
+ * (user report: "I clicked sync and lost items"). A "Recently approved"
+ * row does the same for approvals (utils/inboxApprovedHistory): the bank
+ * entries approved lately, each expanding into a short editor (name,
+ * category, people, business) that updates the budget entry in place - so
+ * a wrong pick is fixed here instead of in the Budget tab (user request).
  *
  * Approvals run through reviewInboxService (entry -> ledger -> inbox write
  * order); the host screen refreshes its entry list via `onChanged`.
@@ -96,7 +100,14 @@ import { remainingForPlan } from "../utils/purchasePlanner";
 import { triggerHaptic } from "../utils/haptics";
 import { generateUUID } from "../utils/uuid";
 import { sanitizeTextInput } from "../utils/sanitize";
-import { addBudgetEntry } from "../storage/budgetStorage";
+import { addBudgetEntry, updateBudgetEntry } from "../storage/budgetStorage";
+import {
+  APPROVED_HISTORY_DAYS,
+  approvedEntryDraft,
+  approvedEntryPatch,
+  recentApprovedEntries,
+  type ApprovedEntryEdit,
+} from "../utils/inboxApprovedHistory";
 import { buildEntryDateISO, lastDayOfYearMonth } from "../utils/entryDate";
 import {
   detectRecurringBill,
@@ -280,8 +291,24 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showRules, setShowRules] = useState(false);
-  /** "Recently skipped" view in place of the list (same sheet, no second Modal). */
-  const [showSkipped, setShowSkipped] = useState(false);
+  /**
+   * "Recently skipped" / "Recently approved" view in place of the list
+   * (same sheet, no second Modal). null = the inbox itself.
+   */
+  const [historyView, setHistoryView] = useState<"skipped" | "approved" | null>(null);
+  const showSkipped = historyView === "skipped";
+  // Read once per mount: the window is 30 days wide, so a stamp that is
+  // hours old only ever lets a few extra rows through.
+  const [historyNow] = useState(() => new Date());
+  const approvedEntries = useMemo(
+    () => recentApprovedEntries(entries, historyNow),
+    [entries, historyNow],
+  );
+  /** Approved entry whose inline editor is open, and its unsaved values. */
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<ApprovedEntryEdit | null>(null);
+  /** Approved entry id being saved. */
+  const [savingEditId, setSavingEditId] = useState<string | null>(null);
   /** Skipped row id being restored. */
   const [restoringId, setRestoringId] = useState<string | null>(null);
   /** Last failed load/approve/skip, shown under the header until the next action. */
@@ -669,6 +696,49 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       }
     },
     [refresh, t],
+  );
+
+  const toggleEditApproved = useCallback((entry: BudgetEntry) => {
+    setEditId((prev) => {
+      if (prev === entry.id) {
+        setEditDraft(null);
+        return null;
+      }
+      setEditDraft(approvedEntryDraft(entry));
+      return entry.id;
+    });
+  }, []);
+
+  /**
+   * Save a "Recently approved" edit: a plain field update on the budget
+   * entry (only the fields that changed - see approvedEntryPatch). The
+   * host reloads its entries via onChanged, which is what refreshes the row.
+   */
+  const handleSaveApproved = useCallback(
+    async (entry: BudgetEntry) => {
+      if (!editDraft) return;
+      const patch = approvedEntryPatch(entry, editDraft);
+      if (!patch) {
+        setEditId(null);
+        setEditDraft(null);
+        return;
+      }
+      setSavingEditId(entry.id);
+      setActionError(null);
+      try {
+        await updateBudgetEntry(entry.id, patch);
+        await onChanged();
+        triggerHaptic("success");
+        setEditId(null);
+        setEditDraft(null);
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(describeError(error, t("budget.inbox.errors.change")));
+      } finally {
+        setSavingEditId(null);
+      }
+    },
+    [editDraft, onChanged, t],
   );
 
   /**
@@ -1441,7 +1511,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             />
           ) : null}
 
-          {!showSkipped && pendingTransactions.length > 1 ? (
+          {!historyView && pendingTransactions.length > 1 ? (
             <View style={styles.groupToggleRow}>
               <Text style={styles.groupToggleLabel}>{t("budget.inbox.groupBy.label")}</Text>
               <View style={styles.groupToggle}>
@@ -1479,7 +1549,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             </View>
           ) : null}
 
-          {!showSkipped && suggestedReadyCount > 0 ? (
+          {!historyView && suggestedReadyCount > 0 ? (
             <TouchableOpacity
               style={[styles.bulkBar, bulkBusy && styles.buttonDisabled]}
               onPress={confirmBulkApprove}
@@ -1493,23 +1563,203 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             </TouchableOpacity>
           ) : null}
 
-          {skippedTransactions.length > 0 || showSkipped ? (
+          {historyView ? (
             <TouchableOpacity
               style={styles.skippedToggle}
-              onPress={() => setShowSkipped((v) => !v)}
+              onPress={() => setHistoryView(null)}
               accessibilityRole="button"
-              accessibilityState={{ expanded: showSkipped }}
             >
-              <Text style={styles.skippedToggleText}>
-                {showSkipped
-                  ? t("budget.inbox.skipped.back")
-                  : t("budget.inbox.skipped.toggle", { count: skippedTransactions.length })}
-              </Text>
-              <Text style={styles.skippedToggleChevron}>{showSkipped ? "‹" : "›"}</Text>
+              <Text style={styles.skippedToggleText}>{t("budget.inbox.skipped.back")}</Text>
+              <Text style={styles.skippedToggleChevron}>‹</Text>
             </TouchableOpacity>
-          ) : null}
+          ) : (
+            <>
+              {approvedEntries.length > 0 ? (
+                <TouchableOpacity
+                  style={styles.skippedToggle}
+                  onPress={() => setHistoryView("approved")}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.skippedToggleText}>
+                    {t("budget.inbox.approved.toggle", { count: approvedEntries.length })}
+                  </Text>
+                  <Text style={styles.skippedToggleChevron}>›</Text>
+                </TouchableOpacity>
+              ) : null}
+              {skippedTransactions.length > 0 ? (
+                <TouchableOpacity
+                  style={styles.skippedToggle}
+                  onPress={() => setHistoryView("skipped")}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.skippedToggleText}>
+                    {t("budget.inbox.skipped.toggle", { count: skippedTransactions.length })}
+                  </Text>
+                  <Text style={styles.skippedToggleChevron}>›</Text>
+                </TouchableOpacity>
+              ) : null}
+            </>
+          )}
 
-          {showSkipped ? (
+          {historyView === "approved" ? (
+            <FlatList
+              data={approvedEntries}
+              keyExtractor={(entry) => entry.id}
+              contentContainerStyle={styles.listContent}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
+              extraData={[editId, editDraft, savingEditId]}
+              ListHeaderComponent={
+                <View>
+                  <Text style={styles.sectionHeader}>{t("budget.inbox.approved.title")}</Text>
+                  <Text style={styles.skippedSubtitle}>
+                    {t("budget.inbox.approved.subtitle", { days: APPROVED_HISTORY_DAYS })}
+                  </Text>
+                </View>
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.emptyText}>{t("budget.inbox.approved.empty")}</Text>
+                </View>
+              }
+              renderItem={({ item: entry }) => {
+                const editing = editId === entry.id && editDraft !== null;
+                const saving = savingEditId === entry.id;
+                const isExpense = entry.type === "expense";
+                const assigned = isExpense ? entryPersonIds(entry) : [];
+                const unchanged =
+                  editing && editDraft ? approvedEntryPatch(entry, editDraft) === null : true;
+                return (
+                  <View style={styles.itemCard}>
+                    <TouchableOpacity
+                      style={styles.itemHeader}
+                      onPress={() => toggleEditApproved(entry)}
+                      disabled={savingEditId !== null}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: editing }}
+                    >
+                      <View style={styles.itemTextWrap}>
+                        <Text style={styles.itemMerchant} numberOfLines={1}>
+                          {entry.description ||
+                            entry.merchant ||
+                            t("budget.inbox.row.noDescription")}
+                        </Text>
+                        <Text style={styles.itemMeta} numberOfLines={1}>
+                          {[
+                            formatPaymentDay(entry.date, i18n.language),
+                            categoryLabel(t, entry.category),
+                            entry.businessId
+                              ? `💼 ${
+                                  businessNameById.get(entry.businessId) ??
+                                  t("budget.inbox.row.deletedBusiness")
+                                }`
+                              : null,
+                            assigned.length > 0
+                              ? `👤 ${formatPersonNames(
+                                  assigned,
+                                  personNameById,
+                                  t("budget.inbox.row.deletedPerson"),
+                                )}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </Text>
+                        <Text style={styles.itemMeta} numberOfLines={1}>
+                          {t("budget.inbox.approved.when", {
+                            date: formatPaymentDay(entry.createdAt, i18n.language),
+                          })}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.itemAmount,
+                          { color: isExpense ? colors.warning : colors.success },
+                        ]}
+                      >
+                        {isExpense ? "-" : "+"}
+                        {formatCurrency(entry.amount)}
+                      </Text>
+                    </TouchableOpacity>
+                    {editing && editDraft ? (
+                      <View style={styles.expandedArea}>
+                        <Text style={styles.label}>{t("budget.inbox.form.nameLabel")}</Text>
+                        <TextInput
+                          style={styles.nameInput}
+                          value={editDraft.name}
+                          onChangeText={(name) =>
+                            setEditDraft((prev) => (prev ? { ...prev, name } : prev))
+                          }
+                          placeholder={entry.merchant || t("budget.inbox.form.namePlaceholder")}
+                          placeholderTextColor={colors.textMuted}
+                          maxLength={220}
+                          returnKeyType="done"
+                        />
+                        <Text style={styles.label}>{t("budget.inbox.form.categoryLabel")}</Text>
+                        <CategoryPillPicker
+                          value={editDraft.category}
+                          onChange={(category) =>
+                            setEditDraft((prev) => (prev ? { ...prev, category } : prev))
+                          }
+                          customCategories={customCategories}
+                          pinCurrentValue
+                          allowCreate
+                        />
+                        {isExpense && (people.length > 0 || editDraft.personIds.length > 0) ? (
+                          <>
+                            <Text style={styles.label}>{t("budget.inbox.form.peopleLabel")}</Text>
+                            <MultiTagPillPicker
+                              options={people}
+                              values={[...editDraft.personIds]}
+                              onChange={(personIds) =>
+                                setEditDraft((prev) => (prev ? { ...prev, personIds } : prev))
+                              }
+                              noneLabel={t("budget.inbox.form.unassigned")}
+                              glyph="👤"
+                              deletedLabel={t("budget.inbox.row.deletedPerson")}
+                            />
+                          </>
+                        ) : null}
+                        {businesses.length > 0 || editDraft.businessId ? (
+                          <>
+                            <Text style={styles.label}>{t("budget.inbox.form.businessLabel")}</Text>
+                            <TagPillPicker
+                              options={businesses}
+                              value={editDraft.businessId}
+                              onChange={(businessId) =>
+                                setEditDraft((prev) => (prev ? { ...prev, businessId } : prev))
+                              }
+                              noneLabel={t("budget.inbox.form.personal")}
+                              glyph="💼"
+                              deletedLabel={t("budget.inbox.row.deletedBusiness")}
+                            />
+                          </>
+                        ) : null}
+                        <TouchableOpacity
+                          style={[
+                            styles.restoreButton,
+                            styles.saveEditButton,
+                            (saving || unchanged) && styles.buttonDisabled,
+                          ]}
+                          onPress={() => void handleSaveApproved(entry)}
+                          disabled={saving || unchanged}
+                          accessibilityRole="button"
+                          accessibilityState={{ disabled: saving || unchanged }}
+                        >
+                          <Text style={styles.approveButtonText}>
+                            {saving
+                              ? t("budget.inbox.approved.saving")
+                              : t("budget.inbox.approved.save")}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              }}
+            />
+          ) : showSkipped ? (
             <FlatList
               data={skippedTransactions}
               keyExtractor={(record) => record.item.id}
@@ -1898,6 +2148,10 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.accent,
       fontSize: 13,
       fontWeight: "700",
+    },
+    saveEditButton: {
+      backgroundColor: colors.accent,
+      marginTop: 4,
     },
     sectionHeaderRow: {
       flexDirection: "row",

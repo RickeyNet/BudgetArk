@@ -133,6 +133,17 @@ export const budgetInbox: Localized<typeof en> = {
       stale: "Die Bank meldet diese vorgemerkte Buchung nicht mehr",
     },
   },
+  /** "Recently approved": bank entries approved lately, editable in place. */
+  approved: {
+    toggle: "Kürzlich freigegeben · {{count}}",
+    title: "Kürzlich freigegeben",
+    subtitle:
+      "Umsätze, die in den letzten {{days}} Tagen freigegeben wurden - von dir, von einer Regel oder auf dem Handy deines Partners. Tippe einen an, um Name, Kategorie, Personen oder Unternehmen zu ändern; der Eintrag in deinem Budget wird sofort aktualisiert. Umsätze, die als Schuldenzahlung erfasst oder einem Kaufplan hinzugefügt wurden, stehen hier nicht.",
+    empty: "Zuletzt nichts freigegeben.",
+    when: "Freigegeben am {{date}}",
+    save: "Änderungen speichern",
+    saving: "Wird gespeichert...",
+  },
   notices: {
     syncSkipped_one:
       "{{count}} Umsatz wurde bei diesem Sync übersprungen - siehe Kürzlich übersprungen unten.",
@@ -145,6 +156,7 @@ export const budgetInbox: Localized<typeof en> = {
   },
   errors: {
     restore: "Dieser Umsatz konnte nicht wiederhergestellt werden.",
+    change: "Diese Änderung konnte nicht gespeichert werden.",
     load: "Der Posteingang konnte nicht geladen werden.",
     approve: "Dieser Umsatz konnte nicht freigegeben werden.",
     skip: "Dieser Umsatz konnte nicht übersprungen werden.",

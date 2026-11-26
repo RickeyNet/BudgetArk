@@ -132,6 +132,17 @@ export const budgetInbox = {
       stale: "The bank stopped reporting this pending charge",
     },
   },
+  /** "Recently approved": bank entries approved lately, editable in place. */
+  approved: {
+    toggle: "Recently approved · {{count}}",
+    title: "Recently approved",
+    subtitle:
+      "Transactions approved in the last {{days}} days - by you, by a rule, or on your partner's phone. Tap one to change its name, category, people or business; the entry in your budget updates right away. Transactions logged as a debt payment or added to a purchase plan aren't listed here.",
+    empty: "Nothing approved recently.",
+    when: "Approved {{date}}",
+    save: "Save changes",
+    saving: "Saving...",
+  },
   notices: {
     syncSkipped_one:
       "{{count}} transaction was skipped during this sync - see Recently skipped below.",
@@ -144,6 +155,7 @@ export const budgetInbox = {
   },
   errors: {
     restore: "Couldn't restore this transaction.",
+    change: "Couldn't save this change.",
     load: "Couldn't load the inbox.",
     approve: "Couldn't approve this transaction.",
     skip: "Couldn't skip this transaction.",

@@ -133,6 +133,17 @@ export const budgetInbox: Localized<typeof en> = {
       stale: "Banken rapporterar inte längre den här väntande transaktionen",
     },
   },
+  /** "Recently approved": bank entries approved lately, editable in place. */
+  approved: {
+    toggle: "Nyligen godkända · {{count}}",
+    title: "Nyligen godkända",
+    subtitle:
+      "Transaktioner som godkänts de senaste {{days}} dagarna - av dig, av en regel eller på din partners telefon. Tryck på en för att ändra namn, kategori, personer eller företag; posten i din budget uppdateras direkt. Transaktioner som bokförts som skuldbetalning eller lagts till en köpplan visas inte här.",
+    empty: "Inget godkänt nyligen.",
+    when: "Godkänd {{date}}",
+    save: "Spara ändringar",
+    saving: "Sparar...",
+  },
   notices: {
     syncSkipped_one:
       "{{count}} transaktion hoppades över under den här synken - se Nyligen överhoppade nedan.",
@@ -145,6 +156,7 @@ export const budgetInbox: Localized<typeof en> = {
   },
   errors: {
     restore: "Kunde inte återställa den här transaktionen.",
+    change: "Kunde inte spara den här ändringen.",
     load: "Kunde inte läsa in inkorgen.",
     approve: "Kunde inte godkänna den här transaktionen.",
     skip: "Kunde inte hoppa över den här transaktionen.",
