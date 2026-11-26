@@ -131,10 +131,30 @@ export const isTenantsValue = (value: unknown): boolean =>
     value.length <= MAX_TENANTS_PER_BUSINESS &&
     value.every(isValidTenant));
 
-/** The usable tenants of a business - invalid records are skipped. */
+/**
+ * Whether a business is a rental property (has the tenant features):
+ * marked "rental", or - for a business from before the setting existed -
+ * already carrying tenants. A business explicitly switched to "general"
+ * is not, even if tenants are still stored on it.
+ */
+export const isRentalBusiness = (
+  business: Pick<Business, "kind" | "tenants"> | undefined
+): boolean => {
+  if (!business) return false;
+  if (business.kind === "rental") return true;
+  if (business.kind !== undefined) return false;
+  return Array.isArray(business.tenants) && business.tenants.some(isValidTenant);
+};
+
+/**
+ * The usable tenants of a business - invalid records are skipped, and a
+ * business that is not a rental has none (its stored tenants are kept but
+ * every reader ignores them until rental is switched back on).
+ */
 export const businessTenants = (
-  business: Pick<Business, "tenants"> | undefined
+  business: Pick<Business, "kind" | "tenants"> | undefined
 ): Tenant[] => {
+  if (!isRentalBusiness(business)) return [];
   const raw: unknown = business?.tenants;
   return Array.isArray(raw) ? raw.filter(isValidTenant) : [];
 };
@@ -502,7 +522,7 @@ export interface RentRoll {
 
 /** Every tenant of one business with what they owe. */
 export const buildRentRoll = (
-  business: Pick<Business, "id" | "tenants">,
+  business: Pick<Business, "id" | "kind" | "tenants">,
   entries: readonly BudgetEntry[],
   today: Date = new Date()
 ): RentRoll => {
@@ -536,7 +556,7 @@ export const buildRentRoll = (
  */
 export const resolveTenantId = (
   tenantId: string | null | undefined,
-  business: Pick<Business, "tenants"> | undefined,
+  business: Pick<Business, "kind" | "tenants"> | undefined,
   entry: { type: BudgetEntry["type"]; refund?: boolean }
 ): string | undefined => {
   if (!tenantId || entry.type !== "income" || entry.refund) return undefined;

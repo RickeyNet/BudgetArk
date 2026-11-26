@@ -189,6 +189,8 @@ export const modalsPeople: Localized<typeof en> = {
     listHeader: "DINA FÖRETAG ({{count}})",
     empty: "Inga företag än. Lägg till ett ovan.",
     noEntries: "Inga taggade poster",
+    rentalToggle: "Hyresfastighet",
+    rentalHint: "Lägger till hyresgäster, obetald hyra och avgifter för den här verksamheten.",
     tenantsLink: "Hyresgäster",
     tenantsOwed: "Hyresgäster är skyldiga {{amount}}",
     tenantsA11y: "Öppna hyresgäster för {{name}}",

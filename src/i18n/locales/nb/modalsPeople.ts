@@ -189,6 +189,8 @@ export const modalsPeople: Localized<typeof en> = {
     listHeader: "BEDRIFTENE DINE ({{count}})",
     empty: "Ingen bedrifter enda. Legg til en ovenfor.",
     noEntries: "Ingen merkede poster",
+    rentalToggle: "Utleiebolig",
+    rentalHint: "Legger til leietakere, skyldig leie og gebyrer for denne virksomheten.",
     tenantsLink: "Leietakere",
     tenantsOwed: "Leietakere skylder {{amount}}",
     tenantsA11y: "Åpne leietakere for {{name}}",

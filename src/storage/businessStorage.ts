@@ -15,6 +15,7 @@ import { ensureUpdatedAt } from "../utils/recordTimestamps";
 import { clearAssigneesFromMerchantRules } from "./merchantRulesStorage";
 import {
   Business,
+  BusinessKind,
   Tenant,
   BUSINESS_STORAGE_VERSION,
   MAX_BUSINESSES,
@@ -210,7 +211,8 @@ const validateName = (
 };
 
 export const addBusiness = async (
-  rawName: string
+  rawName: string,
+  options: { kind?: BusinessKind } = {}
 ): Promise<BusinessMutationResult> => {
   const all = await readStore();
   const live = filterLive(all);
@@ -229,6 +231,7 @@ export const addBusiness = async (
     {
       id: generateUUID(),
       name: checked.name,
+      ...(options.kind ? { kind: options.kind } : {}),
       createdAt: now,
       updatedAt: now,
     },
@@ -239,7 +242,7 @@ export const addBusiness = async (
 
 export const updateBusiness = async (
   id: string,
-  patch: { name?: string; tenants?: Tenant[] }
+  patch: { name?: string; kind?: BusinessKind; tenants?: Tenant[] }
 ): Promise<BusinessMutationResult> => {
   const all = await readStore();
   const target = all.find((b) => b.id === id && !b.deletedAt);
@@ -263,6 +266,7 @@ export const updateBusiness = async (
   const next = all.map((b) => {
     if (b.id !== id) return b;
     const updated: Business = { ...b, name, updatedAt: new Date().toISOString() };
+    if (patch.kind !== undefined) updated.kind = patch.kind;
     if (patch.tenants !== undefined) {
       if (patch.tenants.length > 0) updated.tenants = patch.tenants;
       else delete updated.tenants;

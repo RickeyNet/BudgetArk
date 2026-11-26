@@ -190,6 +190,8 @@ export const modalsPeople = {
     listHeader: "YOUR BUSINESSES ({{count}})",
     empty: "No businesses yet. Add one above.",
     noEntries: "No tagged entries",
+    rentalToggle: "Rental property",
+    rentalHint: "Adds tenants, rent owed and late fees to this business.",
     tenantsLink: "Tenants",
     tenantsOwed: "Tenants owe {{amount}}",
     tenantsA11y: "Open tenants for {{name}}",

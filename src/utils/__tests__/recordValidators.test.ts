@@ -575,6 +575,10 @@ describe("isBusinessItem", () => {
     };
     expect(isBusinessItem({ ...valid, tenants: [tenant] })).toBe(true);
     expect(isBusinessItem({ ...valid, tenants: [] })).toBe(true);
+    expect(isBusinessItem({ ...valid, kind: "rental" })).toBe(true);
+    expect(isBusinessItem({ ...valid, kind: "general" })).toBe(true);
+    expect(isBusinessItem({ ...valid, kind: 5 })).toBe(false);
+    expect(isBusinessItem({ ...valid, kind: "x".repeat(21) })).toBe(false);
     expect(isBusinessItem({ ...valid, tenants: "Sam" })).toBe(false);
     expect(isBusinessItem({ ...valid, tenants: [{ ...tenant, rents: [] }] })).toBe(false);
     expect(

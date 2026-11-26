@@ -566,6 +566,10 @@ export const isBusinessItem = (
     // Tenants ride on the business record (Business.tenants): bounded and
     // shape-checked here so a hostile peer can't ship an unbounded list.
     isTenantsValue(item.tenants) &&
+    // Business.kind: any short safe label, not just today's values, so a
+    // kind added by a newer peer can't brick the whole business diff -
+    // readers only act on the kinds they know.
+    (item.kind === undefined || isSafeText(item.kind, 20)) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&
     isOptionalIso(item.deletedAt)

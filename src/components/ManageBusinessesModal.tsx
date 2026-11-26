@@ -42,7 +42,7 @@ import { MAX_BUSINESS_NAME_LENGTH } from "../types";
 import { useBusinesses } from "../people/PeopleProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { useCurrency } from "../currency/CurrencyProvider";
-import { buildRentRoll } from "../utils/tenants";
+import { buildRentRoll, isRentalBusiness } from "../utils/tenants";
 import BusinessTenantsPanel from "./BusinessTenantsPanel";
 
 interface ManageBusinessesModalProps {
@@ -71,6 +71,8 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
   const [name, setName] = useState("");
   /** Business id being renamed; null = the form adds a new business. */
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** The form's "Rental property" setting - turns on the tenant features. */
+  const [rental, setRental] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -109,6 +111,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
 
   const resetForm = useCallback(() => {
     setName("");
+    setRental(false);
     setEditingId(null);
     setError(null);
   }, []);
@@ -125,8 +128,8 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
     setError(null);
     try {
       const result = editingId
-        ? await updateBusiness(editingId, { name })
-        : await addBusiness(name);
+        ? await updateBusiness(editingId, { name, kind: rental ? "rental" : "general" })
+        : await addBusiness(name, rental ? { kind: "rental" } : undefined);
       if (result.ok) {
         resetForm();
       } else {
@@ -138,11 +141,12 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [addBusiness, editingId, name, resetForm, saving, t, updateBusiness]);
+  }, [addBusiness, editingId, name, rental, resetForm, saving, t, updateBusiness]);
 
   const handleStartRename = useCallback((business: Business) => {
     setEditingId(business.id);
     setName(business.name);
+    setRental(isRentalBusiness(business));
     setError(null);
   }, []);
 
@@ -184,7 +188,9 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
   // Resolved from the live list so the panel follows its own saves (and
   // falls back to the list if the business is deleted from under it).
   const tenantsBusiness = tenantsFor
-    ? businesses.find((business) => business.id === tenantsFor)
+    ? businesses.find(
+        (business) => business.id === tenantsFor && isRentalBusiness(business)
+      )
     : undefined;
 
   return (
@@ -252,6 +258,26 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
               />
             </View>
 
+            <TouchableOpacity
+              style={styles.rentalRow}
+              onPress={() => setRental((on) => !on)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: rental }}
+              accessibilityLabel={t("modals.people.businesses.rentalToggle")}
+            >
+              <View style={[styles.checkbox, rental && styles.checkboxOn]}>
+                {rental ? <Text style={styles.checkboxMark}>✓</Text> : null}
+              </View>
+              <View style={styles.rowTextWrap}>
+                <Text style={styles.rowName}>
+                  🏠 {t("modals.people.businesses.rentalToggle")}
+                </Text>
+                <Text style={styles.rowCount}>
+                  {t("modals.people.businesses.rentalHint")}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
             {error && <Text style={styles.errorText}>{error}</Text>}
 
             <View style={styles.formButtons}>
@@ -287,10 +313,11 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
             ) : (
               businesses.map((business) => {
                 const count = entryCounts[business.id] ?? 0;
+                const isRental = isRentalBusiness(business);
                 const rentOwed = buildRentRoll(business, entries).totalOutstanding;
                 return (
                   <View key={business.id} style={styles.row}>
-                    <Text style={styles.rowIcon}>💼</Text>
+                    <Text style={styles.rowIcon}>{isRental ? "🏠" : "💼"}</Text>
                     <View style={styles.rowTextWrap}>
                       <Text style={styles.rowName} numberOfLines={1}>
                         {business.name}
@@ -308,24 +335,26 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
                         </Text>
                       ) : null}
                     </View>
-                    <TouchableOpacity
-                      onPress={() => {
-                        resetForm();
-                        setTenantsFor(business.id);
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel={t("modals.people.businesses.tenantsA11y", { name: business.name })}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Text style={styles.rowRename}>{t("modals.people.businesses.tenantsLink")}</Text>
-                    </TouchableOpacity>
+                    {isRental ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          resetForm();
+                          setTenantsFor(business.id);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={t("modals.people.businesses.tenantsA11y", { name: business.name })}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={styles.rowRename}>{t("modals.people.businesses.tenantsLink")}</Text>
+                      </TouchableOpacity>
+                    ) : null}
                     <TouchableOpacity
                       onPress={() => handleStartRename(business)}
                       accessibilityRole="button"
                       accessibilityLabel={t("modals.people.manage.renameA11y", { name: business.name })}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={styles.rowRename}>{t("modals.people.manage.rename")}</Text>
+                      <Text style={styles.rowRename}>{t("common.edit")}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleDelete(business.id, business.name)}
@@ -441,6 +470,27 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       paddingVertical: tokens.padSm,
       borderBottomWidth: 1,
       borderBottomColor: colors.cardBorder,
+    },
+    rentalRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.gap,
+      paddingVertical: tokens.gapSm,
+    },
+    checkbox: {
+      width: 24,
+      height: 24,
+      borderRadius: tokens.radiusSm,
+      borderWidth: 2,
+      borderColor: colors.cardBorder,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    checkboxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+    checkboxMark: {
+      color: colors.accentButtonText,
+      fontSize: scale(14),
+      fontWeight: "800",
     },
     rowIcon: { fontSize: scale(18) },
     rowTextWrap: { flex: 1 },

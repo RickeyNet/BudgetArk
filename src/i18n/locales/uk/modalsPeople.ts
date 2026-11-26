@@ -212,6 +212,8 @@ export const modalsPeople: LocalizedPlural<typeof en> = {
     listHeader: "ТВОЇ БІЗНЕСИ ({{count}})",
     empty: "Бізнесів поки немає. Додай один вище.",
     noEntries: "Немає позначених записів",
+    rentalToggle: "Здається в оренду",
+    rentalHint: "Додає до цього бізнесу орендарів, борг за оренду та штрафи.",
     tenantsLink: "Орендарі",
     tenantsOwed: "Орендарі винні {{amount}}",
     tenantsA11y: "Відкрити орендарів: {{name}}",

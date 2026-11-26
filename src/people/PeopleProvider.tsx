@@ -22,7 +22,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import type { Business, Person, Tenant } from "../types";
+import type { Business, BusinessKind, Person, Tenant } from "../types";
 import {
   addPerson as addPersonInStore,
   deletePerson as deletePersonInStore,
@@ -52,10 +52,13 @@ interface PeopleContextValue {
   updatePerson: (id: string, patch: { name?: string }) => Promise<PersonMutationResult>;
   deletePerson: (id: string) => Promise<void>;
   restorePerson: (id: string) => Promise<void>;
-  addBusiness: (name: string) => Promise<BusinessMutationResult>;
+  addBusiness: (
+    name: string,
+    options?: { kind?: BusinessKind }
+  ) => Promise<BusinessMutationResult>;
   updateBusiness: (
     id: string,
-    patch: { name?: string; tenants?: Tenant[] }
+    patch: { name?: string; kind?: BusinessKind; tenants?: Tenant[] }
   ) => Promise<BusinessMutationResult>;
   deleteBusiness: (id: string) => Promise<void>;
   restoreBusiness: (id: string) => Promise<void>;
@@ -129,15 +132,15 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [refresh]
   );
   const addBusiness = useCallback(
-    async (name: string) => {
-      const result = await addBusinessInStore(name);
+    async (name: string, options?: { kind?: BusinessKind }) => {
+      const result = await addBusinessInStore(name, options);
       if (result.ok) await refresh();
       return result;
     },
     [refresh]
   );
   const updateBusiness = useCallback(
-    async (id: string, patch: { name?: string; tenants?: Tenant[] }) => {
+    async (id: string, patch: { name?: string; kind?: BusinessKind; tenants?: Tenant[] }) => {
       const result = await updateBusinessInStore(id, patch);
       if (result.ok) await refresh();
       return result;

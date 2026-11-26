@@ -6,6 +6,7 @@ import {
   buildTenantLedger,
   businessTenants,
   isRentPayment,
+  isRentalBusiness,
   isTenantsValue,
   isValidTenant,
   lastDueMonth,
@@ -507,5 +508,25 @@ describe("planPastPayments", () => {
     const ledger = buildTenantLedger(tenant(), "house", [], today);
     expect(planPastPayments(ledger, "April")).toEqual([]);
     expect(planPastPayments(ledger, "2025-12")).toEqual([]);
+  });
+});
+
+describe("isRentalBusiness", () => {
+  it("is on for a rental, and for an older business that already has tenants", () => {
+    expect(isRentalBusiness({ kind: "rental" })).toBe(true);
+    expect(isRentalBusiness({ tenants: [tenant()] })).toBe(true);
+    expect(isRentalBusiness({})).toBe(false);
+    expect(isRentalBusiness({ tenants: [] })).toBe(false);
+    expect(isRentalBusiness(undefined)).toBe(false);
+  });
+
+  it("switching to general hides the tenants without deleting them", () => {
+    const off = { id: "house", kind: "general" as const, tenants: [tenant()] };
+    expect(isRentalBusiness(off)).toBe(false);
+    expect(businessTenants(off)).toEqual([]);
+    expect(buildRentRoll(off, [], day(2026, 4, 10)).totalOutstanding).toBe(0);
+    expect(resolveTenantId("t1", off, { type: "income" })).toBeUndefined();
+    // Switching rental back on brings them straight back.
+    expect(businessTenants({ ...off, kind: "rental" }).map((t) => t.id)).toEqual(["t1"]);
   });
 });

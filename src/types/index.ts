@@ -221,6 +221,14 @@ export interface Business {
   id: string;
   name: string;
   /**
+   * What sort of business this is. "rental" (a rental property) turns on
+   * the tenant features; "general" is an ordinary business and is what
+   * switching rental off writes. Absent on businesses made before the
+   * setting existed - those count as rental only if they already have
+   * tenants (see utils/tenants `isRentalBusiness`).
+   */
+  kind?: BusinessKind;
+  /**
    * Tenants renting from this business (a rental property). Each carries
    * its monthly rent; what a tenant still owes is derived from that rent
    * and the income entries tagged to them (`BudgetEntry.tenantId`) - see
@@ -235,6 +243,8 @@ export interface Business {
   /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
+
+export type BusinessKind = "rental" | "general";
 
 export const BUSINESS_STORAGE_VERSION = 1;
 export const MAX_BUSINESSES = 20;

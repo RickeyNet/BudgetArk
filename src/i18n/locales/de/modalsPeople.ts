@@ -189,6 +189,8 @@ export const modalsPeople: Localized<typeof en> = {
     listHeader: "DEINE GESCHÄFTE ({{count}})",
     empty: "Noch keine Geschäfte. Füge oben eines hinzu.",
     noEntries: "Keine zugeordneten Buchungen",
+    rentalToggle: "Mietobjekt",
+    rentalHint: "Fügt diesem Unternehmen Mieter, offene Miete und Mahngebühren hinzu.",
     tenantsLink: "Mieter",
     tenantsOwed: "Mieter schulden {{amount}}",
     tenantsA11y: "Mieter von {{name}} öffnen",

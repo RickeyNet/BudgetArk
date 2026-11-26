@@ -212,6 +212,8 @@ export const modalsPeople: LocalizedPlural<typeof en> = {
     listHeader: "ТВОИ БИЗНЕСЫ ({{count}})",
     empty: "Бизнесов пока нет. Добавь один выше.",
     noEntries: "Нет отмеченных записей",
+    rentalToggle: "Сдаётся в аренду",
+    rentalHint: "Добавляет к этому бизнесу арендаторов, долг по аренде и штрафы.",
     tenantsLink: "Арендаторы",
     tenantsOwed: "Арендаторы должны {{amount}}",
     tenantsA11y: "Открыть арендаторов: {{name}}",
