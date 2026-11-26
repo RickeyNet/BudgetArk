@@ -85,7 +85,8 @@ import { requestArkSetupPrompt } from "./src/storage/arkSetupStorage";
 import { isUpdateSafe } from "./src/utils/versionGuard";
 import { getPrivacyMode } from "./src/storage/privacyStorage";
 import {
-  RELEASE_NOTES_URL,
+  RELEASE_NOTES_GITHUB_URL,
+  RELEASE_NOTES_WEBSITE_URL,
   countHiddenHighlights,
   resolveUpdateInfo,
   summarizeHighlight,
@@ -683,26 +684,46 @@ const AppContent: React.FC = () => {
                 </Text>
               )}
               {/* Headlines only above - this is the way to read every change
-                  BEFORE installing. It opens the public changelog in the
-                  browser because this (older) bundle's Release Notes screen
-                  doesn't have the incoming version yet, and the OTA message
-                  is too small to carry the full text (OTA_MESSAGE_MAX). */}
-              <TouchableOpacity
-                style={styles.updateNotesLink}
-                onPress={() => {
-                  void Linking.openURL(RELEASE_NOTES_URL).catch(() => {});
-                }}
-                accessibilityRole="link"
-                accessibilityLabel={t("modals.engage.updateReady.seeFullNotes")}
-                accessibilityHint={t("modals.engage.updateReady.seeFullNotesHint")}
-              >
-                <Text style={[styles.updateNotesLinkText, { color: colors.accent }]}>
+                  BEFORE installing. The links open a public changelog in the
+                  browser (website or GitHub, the reader's choice) because
+                  this (older) bundle's Release Notes screen doesn't have the
+                  incoming version yet, and the OTA message is too small to
+                  carry the full text (OTA_MESSAGE_MAX). */}
+              <View style={styles.updateNotesLinks}>
+                <Text style={[styles.updateNotesLabel, { color: colors.textDim }]}>
                   {t("modals.engage.updateReady.seeFullNotes")}
                 </Text>
+                <View style={styles.updateNotesLinkRow}>
+                  {(
+                    [
+                      ["onWebsite", RELEASE_NOTES_WEBSITE_URL],
+                      ["onGitHub", RELEASE_NOTES_GITHUB_URL],
+                    ] as const
+                  ).map(([key, url]) => (
+                    <TouchableOpacity
+                      key={key}
+                      style={[styles.updateNotesLink, { borderColor: colors.cardBorder }]}
+                      onPress={() => {
+                        void Linking.openURL(url).catch(() => {});
+                      }}
+                      accessibilityRole="link"
+                      accessibilityLabel={`${t("modals.engage.updateReady.seeFullNotes")} ${t(`modals.engage.updateReady.${key}`)}`}
+                      accessibilityHint={t("modals.engage.updateReady.seeFullNotesHint")}
+                    >
+                      <Text
+                        style={[styles.updateNotesLinkText, { color: colors.accent }]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                      >
+                        {t(`modals.engage.updateReady.${key}`)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
                 <Text style={[styles.updateMeta, { color: colors.textMuted }]}>
                   {t("modals.engage.updateReady.seeFullNotesHint")}
                 </Text>
-              </TouchableOpacity>
+              </View>
             </ScrollView>
             <View style={styles.dialogActions}>
               <TouchableOpacity
@@ -938,10 +959,27 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 8,
   },
-  updateNotesLink: {
+  updateNotesLinks: {
     alignSelf: "stretch",
-    alignItems: "center",
     paddingTop: 10,
+  },
+  updateNotesLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  updateNotesLinkRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  updateNotesLink: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: "center",
   },
   updateNotesLinkText: {
     fontSize: 14,

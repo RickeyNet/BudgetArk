@@ -25,18 +25,21 @@ export type ResolvedUpdateInfo = {
  * highlights at all. scripts/eas-update-message.mjs therefore stamps only as
  * many headlines as fit under this (releaseNotes.test.ts enforces it), which
  * is also why the full notes can't travel in the message - the dialog links
- * to RELEASE_NOTES_URL for those.
+ * to RELEASE_NOTES_WEBSITE_URL / RELEASE_NOTES_GITHUB_URL for those.
  */
 export const OTA_MESSAGE_MAX = 1024;
 
 /**
- * The public changelog, opened in the browser from the "Update Ready"
+ * The public changelogs, opened in the browser from the "Update Ready"
  * dialog so someone can read every change BEFORE installing (the installed
- * bundle doesn't contain the incoming version's notes). Deliberately a link
- * the user taps, not something the app fetches: an in-app download would be
- * a new network destination (CLAUDE.md egress allowlist).
+ * bundle doesn't contain the incoming version's notes). Two places, the
+ * reader's choice (user request): the website's plain-language page, or the
+ * technical RELEASE_NOTES.md on GitHub. Deliberately links the user taps,
+ * not something the app fetches: an in-app download would be a new network
+ * destination (CLAUDE.md egress allowlist).
  */
-export const RELEASE_NOTES_URL =
+export const RELEASE_NOTES_WEBSITE_URL = "https://budgetark.app/release-notes.html";
+export const RELEASE_NOTES_GITHUB_URL =
   "https://github.com/RickeyNet/BudgetArk/blob/master/RELEASE_NOTES.md";
 
 /** How many highlights the dialog isn't showing, given it lists `shown`. */

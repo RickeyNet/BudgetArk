@@ -140,6 +140,8 @@ export const modalsEngage: LocalizedPlural<typeof en> = {
     defaultMessage: "Нове оновлення готове до встановлення.",
     moreInReleaseNotes: "+ще {{n}} у розділі «Що нового»",
     seeFullNotes: "Усі зміни докладно",
+    onWebsite: "Сайт",
+    onGitHub: "GitHub",
     seeFullNotesHint: "Відкриється у браузері. Після встановлення також у розділі «Профіль» → «Що нового».",
     published: "Опубліковано {{when}}",
     later: "Пізніше",
