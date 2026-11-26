@@ -35,6 +35,8 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useBusinesses } from "../people/PeopleProvider";
+import { DayPickerField, MonthPickerField } from "./DatePickerFields";
+import MonthDayCalendar from "./MonthDayCalendar";
 import { addBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
 import type { BudgetEntry, Business, RentTerm, Tenant } from "../types";
 import {
@@ -581,24 +583,20 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
             ? t("modals.people.tenants.form.firstMonthLabel")
             : t("modals.people.tenants.form.fromMonthLabel")}
         </Text>
-        <TextInput
-          style={styles.input}
-          placeholder="2026-01"
-          placeholderTextColor={colors.textMuted}
+        <MonthPickerField
           value={form.from}
-          onChangeText={(from) => patchForm({ from })}
-          autoCapitalize="none"
-          autoCorrect={false}
-          maxLength={7}
+          onChange={(from) => patchForm({ from })}
         />
 
         <Text style={styles.label}>{t("modals.people.tenants.form.dueDayLabel")}</Text>
-        <TextInput
-          style={styles.input}
-          value={form.dueDay}
-          onChangeText={(dueDay) => patchForm({ dueDay })}
-          keyboardType="number-pad"
-          maxLength={2}
+        {/* This month's calendar, the same grid as the debt form's due
+            day. 29-31 stay pickable (dimmed in a short month); the rent
+            rule clamps them to the month's last day. */}
+        <MonthDayCalendar
+          yearMonth={getMonthKey()}
+          mode="dayOfMonth"
+          selectedDay={Number(form.dueDay) || null}
+          onSelectDay={(day) => patchForm({ dueDay: String(day) })}
         />
 
         <Text style={styles.label}>{t("modals.people.tenants.form.openingLabel")}</Text>
@@ -616,15 +614,10 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
           <>
             <Text style={styles.label}>{t("modals.people.tenants.form.paidThroughLabel")}</Text>
             <Text style={styles.hint}>{t("modals.people.tenants.form.paidThroughHint")}</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="2026-10"
-              placeholderTextColor={colors.textMuted}
+            <MonthPickerField
               value={form.paidThrough}
-              onChangeText={(paidThrough) => patchForm({ paidThrough })}
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={7}
+              onChange={(paidThrough) => patchForm({ paidThrough })}
+              optional
             />
           </>
         ) : null}
@@ -633,15 +626,10 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
           <>
             <Text style={styles.label}>{t("modals.people.tenants.form.endMonthLabel")}</Text>
             <Text style={styles.hint}>{t("modals.people.tenants.form.endMonthHint")}</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="2026-12"
-              placeholderTextColor={colors.textMuted}
+            <MonthPickerField
               value={form.endMonth}
-              onChangeText={(endMonth) => patchForm({ endMonth })}
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={7}
+              onChange={(endMonth) => patchForm({ endMonth })}
+              optional
             />
           </>
         ) : null}
@@ -904,16 +892,12 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
               selectTextOnFocus
             />
             <Text style={styles.label}>{t("modals.people.tenants.payment.dateLabel")}</Text>
-            <TextInput
-              style={styles.input}
+            <DayPickerField
               value={draftDate}
-              onChangeText={(text) => {
-                setDraftDate(text);
+              onChange={(date) => {
+                setDraftDate(date);
                 setError(null);
               }}
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={10}
             />
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
             <View style={styles.buttonRow}>
@@ -959,16 +943,12 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
               keyboardType="decimal-pad"
             />
             <Text style={styles.label}>{t("modals.people.tenants.payment.dateLabel")}</Text>
-            <TextInput
-              style={styles.input}
+            <DayPickerField
               value={draftDate}
-              onChangeText={(text) => {
-                setDraftDate(text);
+              onChange={(date) => {
+                setDraftDate(date);
                 setError(null);
               }}
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={10}
             />
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
             <View style={styles.buttonRow}>
@@ -995,18 +975,12 @@ const BusinessTenantsPanel: React.FC<BusinessTenantsPanelProps> = ({
           <View style={styles.paymentForm}>
             <Text style={styles.label}>{t("modals.people.tenants.past.throughLabel")}</Text>
             <Text style={styles.hint}>{t("modals.people.tenants.past.hint")}</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="2026-10"
-              placeholderTextColor={colors.textMuted}
+            <MonthPickerField
               value={draftThrough}
-              onChangeText={(text) => {
-                setDraftThrough(text);
+              onChange={(month) => {
+                setDraftThrough(month);
                 setError(null);
               }}
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={7}
             />
             {pastPlan.length > 0 ? (
               <Text style={styles.termText}>
