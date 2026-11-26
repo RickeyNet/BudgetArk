@@ -36,6 +36,9 @@ export const budgetScreen = {
     paychecksAllIn_one: "{{count}} paycheck in",
     paychecksAllIn_other: "{{count}} paychecks in",
     monthlyEstimate: "Monthly estimate · tap to edit",
+    /** Income-list line for a business the user tracks income for: its profit counts, a loss does not. */
+    businessProfit: "profit",
+    businessLoss: "{{amount}} loss · not counted",
     deletedPerson: "(deleted person)",
   },
   selection: {

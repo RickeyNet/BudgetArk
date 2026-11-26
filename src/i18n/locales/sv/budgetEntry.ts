@@ -150,7 +150,7 @@ export const budgetEntry: Localized<typeof en> = {
     label: "FÖRETAG (VALFRITT)",
     hintEdit: "Märk den här utgiften med ett företag för deklarationsrapporten.",
     hintAdd: "Märk den här utgiften med ett företag för deklarationsrapporten. Den räknas fortfarande i din privata budget.",
-    hintIncome: "Märk den här inkomsten med ett företag så syns den i företagsrapporten. Den räknas fortfarande i din privata budget.",
+    hintIncome: "Märk den här inkomsten med ett företag. När ett företag har inkomster räknas bara dess vinst (inkomster minus utgifter) i din privata budget varje månad.",
     personal: "Privat",
     deleted: "💼 (borttaget företag)",
   },

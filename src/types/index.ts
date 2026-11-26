@@ -416,6 +416,8 @@ export interface BudgetEntry {
    * Business this entry belongs to (see `Business`): an expense the
    * business paid, or income it earned (a client payment approved from the
    * Review Inbox, a manual deposit). Kept when an entry's type flips.
+   * Once a business has income tagged, its entries leave the personal
+   * totals and only its monthly profit counts (utils/businessProfit).
    * A dangling id (business deleted, or not yet arrived via sync) is
    * harmless: report/badge surfaces show it as "(deleted business)".
    */

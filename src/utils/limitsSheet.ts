@@ -12,7 +12,7 @@
  */
 
 import type { BudgetEntry, CategoryBudgetLimit, CategoryName } from "../types";
-import { entriesForMonth } from "./billFulfillment";
+import { personalEntriesForMonth } from "./businessProfit";
 import { parseMoneyInput } from "./parseMoneyInput";
 import { shiftMonthKey } from "./recurringBillDetection";
 
@@ -60,7 +60,9 @@ const expenseSpendByCategory = (
   monthKey: string
 ): Record<string, number> => {
   const spend: Record<string, number> = {};
-  for (const entry of entriesForMonth(entries, monthKey)) {
+  // Limits are household limits: an income-tracking business's bills are
+  // not counted against them (utils/businessProfit).
+  for (const entry of personalEntriesForMonth(entries, monthKey)) {
     if (entry.type !== "expense") continue;
     spend[entry.category] = (spend[entry.category] ?? 0) + entry.amount;
   }

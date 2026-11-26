@@ -21,7 +21,7 @@ import type {
   PayoffMethod,
   PayoffSimulationResult,
 } from "./calculations";
-import { entriesForMonth } from "./billFulfillment";
+import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 import { t } from "../i18n/translate";
 
 /* ── Category spend averages (from budget history) ── */
@@ -60,8 +60,12 @@ export const buildCategorySpendOptions = (
   const monthsTracked = new Set<string>();
   const totals: Record<string, number> = {};
 
+  // Household spending only - see utils/businessProfit.
+  const tracked = incomeTrackedBusinessIds(entries);
   for (const monthKey of monthKeys) {
-    for (const entry of entriesForMonth(entries, monthKey)) {
+    const month = personalMonth(entries, monthKey, tracked);
+    if (month.businesses.length > 0) monthsTracked.add(monthKey);
+    for (const entry of month.entries) {
       monthsTracked.add(monthKey);
       if (entry.type !== "expense" || entry.category === "Debt Payments") {
         continue;

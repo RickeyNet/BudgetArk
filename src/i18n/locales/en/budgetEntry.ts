@@ -148,7 +148,7 @@ export const budgetEntry = {
     label: "BUSINESS (OPTIONAL)",
     hintEdit: "Tag this expense to a business for the tax-time report.",
     hintAdd: "Tag this expense to a business for the tax-time report. It still counts in your personal budget.",
-    hintIncome: "Tag this income to a business so it shows up in the business report. It still counts in your personal budget.",
+    hintIncome: "Tag this income to a business. Once a business has income, only its profit (income minus its expenses) counts in your personal budget each month.",
     personal: "Personal",
     deleted: "💼 (deleted business)",
   },

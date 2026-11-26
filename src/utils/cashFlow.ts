@@ -18,7 +18,7 @@
 
 import type { BudgetEntry, Debt, MonthStartBalance, Payment } from "../types";
 import { isMonthKey, isMonthStartBalanceRecord } from "./recordValidators";
-import { entriesForMonth } from "./billFulfillment";
+import { personalMonth } from "./businessProfit";
 import { paymentMonthKey } from "./debtDueCalendar";
 import { buildDebtPaymentPlanForMonth } from "./debtPaymentPlan";
 
@@ -116,10 +116,15 @@ export const computeMonthReconciliationDelta = (input: {
   const previous = input.monthBalances[prevKey];
   if (!current || !previous) return null;
 
-  const prevEntries = entriesForMonth(input.entries, prevKey);
-  const prevIncome = prevEntries
-    .filter((e) => e.type === "income")
-    .reduce((sum, e) => sum + e.amount, 0);
+  // Same personal view as the Budget tab: an income-tracking business
+  // counts as its profit only (utils/businessProfit).
+  const prevMonth = personalMonth(input.entries, prevKey);
+  const prevEntries = prevMonth.entries;
+  const prevIncome =
+    prevMonth.businessProfit +
+    prevEntries
+      .filter((e) => e.type === "income")
+      .reduce((sum, e) => sum + e.amount, 0);
   const liveDebtIds = new Set(input.debts.map((d) => d.id));
   const prevPayments = input.payments.filter(
     (p) => liveDebtIds.has(p.debtId) && paymentMonthKey(p.date) === prevKey

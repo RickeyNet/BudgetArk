@@ -20,7 +20,7 @@
 
 import type { BudgetEntry, Debt } from "../types";
 import { getMonthKey, getMonthKeyOffset } from "./budgetMonths";
-import { entriesForMonth } from "./billFulfillment";
+import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 import { roundToCents } from "./money";
 import { addMonthsClamped } from "./debtFreeCountdown";
 
@@ -102,11 +102,16 @@ export const estimateMonthlySurplus = (
 ): SurplusEstimate => {
   let monthsTracked = 0;
   let net = 0;
+  // An income-tracking business adds its monthly profit, nothing else
+  // (utils/businessProfit).
+  const tracked = incomeTrackedBusinessIds(entries);
   for (let i = 1; i <= SURPLUS_LOOKBACK_MONTHS; i++) {
     const monthKey = getMonthKey(new Date(now.getFullYear(), now.getMonth() - i, 1));
-    const monthEntries = entriesForMonth(entries, monthKey);
-    if (monthEntries.length === 0) continue;
+    const month = personalMonth(entries, monthKey, tracked);
+    const monthEntries = month.entries;
+    if (monthEntries.length === 0 && month.businesses.length === 0) continue;
     monthsTracked += 1;
+    net += month.businessProfit;
     for (const entry of monthEntries) {
       if (!Number.isFinite(entry.amount)) continue;
       if (entry.type === "income") net += entry.amount;

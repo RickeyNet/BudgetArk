@@ -26,7 +26,12 @@ import {
   paymentMonthKey,
   upcomingDebtDuesWithin,
 } from "./debtDueCalendar";
-import { entriesForMonth } from "./billFulfillment";
+import {
+  businessEntriesForMonth,
+  incomeTrackedBusinessIds,
+  personalEntriesForMonth,
+  summarizeBusinessEntries,
+} from "./businessProfit";
 import { getMonthKey } from "./budgetMonths";
 import { roundToCents } from "./money";
 
@@ -242,7 +247,18 @@ export const ledgerSoFarThisMonth = (
   const today = now.getDate();
   let income = 0;
   let expenses = 0;
-  for (const entry of entriesForMonth(entries, monthKey)) {
+  // An income-tracking business counts as its profit so far this month
+  // (utils/businessProfit): the same day cut as below, then netted.
+  const tracked = incomeTrackedBusinessIds(entries);
+  for (const line of summarizeBusinessEntries(
+    businessEntriesForMonth(entries, monthKey, tracked).filter(
+      (entry) =>
+        getDayOfMonth(entry, monthKey) <= today && Number.isFinite(entry.amount)
+    )
+  )) {
+    income += line.profit;
+  }
+  for (const entry of personalEntriesForMonth(entries, monthKey, tracked)) {
     const day = getDayOfMonth(entry, monthKey);
     if (day > today) continue;
     // A recurring bill whose day is today is still ahead of us: the

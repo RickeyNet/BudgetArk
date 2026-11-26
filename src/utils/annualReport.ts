@@ -20,7 +20,7 @@ import {
   NetWorthSnapshot,
   Payment,
 } from "../types";
-import { entriesForMonth } from "./billFulfillment";
+import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 import { t } from "../i18n/translate";
 
 /**
@@ -116,9 +116,14 @@ const buildMonthAggregates = (
   // month onward; one-offs count only in their own month; a bill's actual
   // charge replaces its estimate for that month (utils/billFulfillment).
   // Evaluated per explicit month key so any past calendar year works.
+  // An income-tracking business counts as its monthly profit only
+  // (utils/businessProfit) - same as the Budget tab.
+  const tracked = incomeTrackedBusinessIds(entries);
   for (let m = 0; m <= lastMonthIndex; m++) {
     const key = monthKeyFor(year, m);
-    for (const entry of entriesForMonth(entries, key)) {
+    const month = personalMonth(entries, key, tracked);
+    aggs[key].income += month.businessProfit;
+    for (const entry of month.entries) {
       if (!Number.isFinite(entry.amount) || entry.amount <= 0) continue;
       const agg = aggs[key];
       if (entry.type === "income") {

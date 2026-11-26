@@ -21,7 +21,7 @@ import {
   calcPaymentForGoalDate,
   generatePayoffSchedule,
 } from "./calculations";
-import { entriesForMonth } from "./billFulfillment";
+import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 
 /* ── Loan schedule CSV export ── */
 
@@ -350,8 +350,14 @@ export const calcAvgMonthlyExpenses = (
   // where the user paid $0 in expenses but logged income still says "I
   // was tracking, my expenses really were zero," and dropping it from
   // the denominator made historical EF targets larger than necessary.
+  // Household expenses only: an income-tracking business's bills are paid
+  // from its own income (utils/businessProfit), but its activity still
+  // marks the month as tracked.
+  const tracked = incomeTrackedBusinessIds(entries);
   for (const mk of Object.keys(monthTotals)) {
-    for (const entry of entriesForMonth(entries, mk)) {
+    const month = personalMonth(entries, mk, tracked);
+    if (month.businesses.length > 0) monthsTracked.add(mk);
+    for (const entry of month.entries) {
       monthsTracked.add(mk);
       if (entry.type === "expense") monthTotals[mk] += entry.amount;
     }

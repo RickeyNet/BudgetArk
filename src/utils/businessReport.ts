@@ -7,8 +7,10 @@
  * app's cadence logic (so the report matches what each month's Budget
  * screen shows), and render a one-way CSV for sharing with an accountant.
  *
- * Business expenses stay in the personal budget math everywhere else; this
- * report is the separated view.
+ * An expense-only business's expenses stay in the personal budget math
+ * everywhere else; a business with tagged income counts there as its
+ * monthly profit only (utils/businessProfit). Either way this report is
+ * the separated, un-netted view.
  *
  * Income tagged to a business (a client payment approved from the Review
  * Inbox, a manual deposit) is reported next to the expenses as its own

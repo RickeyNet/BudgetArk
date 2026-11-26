@@ -2,6 +2,7 @@ import { BudgetCategory, BudgetEntry, CategoryBudgetLimit, Person } from "../typ
 import { entryPersonIds, personShare } from "./entryPeople";
 import { t } from "../i18n/translate";
 import { entriesForMonth } from "./billFulfillment";
+import { personalMonth } from "./businessProfit";
 import { getMonthKeyOffset } from "./budgetMonths";
 
 
@@ -79,9 +80,12 @@ const buildMonthSummary = (
   entries: BudgetEntry[],
   monthKey: string
 ): MonthSummary => {
-  const monthly = getEntriesForMonth(entries, monthKey);
+  // Personal view: an income-tracking business counts as its profit only
+  // (utils/businessProfit).
+  const month = personalMonth(entries, monthKey);
+  const monthly = month.entries;
   const byCategory: Record<string, number> = {};
-  let totalIncome = 0;
+  let totalIncome = month.businessProfit;
   let totalExpenses = 0;
 
   for (const entry of monthly) {

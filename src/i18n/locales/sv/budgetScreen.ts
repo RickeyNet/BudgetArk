@@ -36,6 +36,8 @@ export const budgetScreen: Localized<typeof en> = {
     paychecksAllIn_one: "{{count}} lön inne",
     paychecksAllIn_other: "{{count}} löner inne",
     monthlyEstimate: "Månatlig uppskattning · tryck för att ändra",
+    businessProfit: "vinst",
+    businessLoss: "{{amount}} i förlust · räknas inte",
     deletedPerson: "(borttagen person)",
   },
   selection: {

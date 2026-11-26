@@ -131,6 +131,11 @@ import type { DensityTokens } from "../theme/density";
 import { getRecurrenceTag } from "../utils/recurrence";
 import { entriesForMonth, incomeRowsForMonth } from "../utils/billFulfillment";
 import { formatDayLabel } from "../utils/dateFormat";
+import {
+  incomeTrackedBusinessIds,
+  isNettedBusinessEntry,
+  personalMonth,
+} from "../utils/businessProfit";
 import { buildPaceAlerts, pacingClockFor } from "../utils/budgetPacing";
 import SpendingPaceBanner from "../components/SpendingPaceBanner";
 import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
@@ -435,10 +440,26 @@ const BudgetScreen: React.FC = () => {
 
   // Recurring-aware AND fulfilment-aware: a bill whose actual charge landed
   // this month shows the actual, not the estimate (utils/billFulfillment).
-  const monthlyEntries = useMemo(
+  // This is the RAW month - every entry, business or not. It feeds the
+  // views that are about a business or about tax (the "Business only"
+  // chip, the 1099 set-aside); personal totals use `monthlyEntries` below.
+  const rawMonthlyEntries = useMemo(
     () => entriesForMonth(entries, selectedMonthKey),
     [entries, selectedMonthKey]
   );
+
+  // Businesses the user tracks income for count as their monthly profit
+  // only - their own income and bills leave the personal totals
+  // (utils/businessProfit). Expense-only businesses are untouched.
+  const trackedBusinessIds = useMemo(
+    () => incomeTrackedBusinessIds(entries),
+    [entries]
+  );
+  const budgetMonth = useMemo(
+    () => personalMonth(entries, selectedMonthKey, trackedBusinessIds),
+    [entries, selectedMonthKey, trackedBusinessIds]
+  );
+  const monthlyEntries = budgetMonth.entries;
 
   const entriesById = useMemo(
     () => new Map(entries.map((entry) => [entry.id, entry])),
@@ -447,10 +468,11 @@ const BudgetScreen: React.FC = () => {
 
   const monthlyIncome = useMemo(
     () =>
+      budgetMonth.businessProfit +
       monthlyEntries
         .filter((entry) => entry.type === "income")
         .reduce((sum, entry) => sum + entry.amount, 0),
-    [monthlyEntries]
+    [budgetMonth.businessProfit, monthlyEntries]
   );
 
   // Actual recorded debt payments that fall in the selected month. Sourced
@@ -580,10 +602,10 @@ const BudgetScreen: React.FC = () => {
    *  Spending card's "Business only" chip. */
   const hasBusinessSpending = useMemo(
     () =>
-      monthlyEntries.some(
+      rawMonthlyEntries.some(
         (entry) => entry.type === "expense" && entry.businessId
       ),
-    [monthlyEntries]
+    [rawMonthlyEntries]
   );
 
   /**
@@ -597,13 +619,15 @@ const BudgetScreen: React.FC = () => {
   const spendingByCategory = useMemo(() => {
     if (!businessOnly) return expensesByCategory;
     const map: Record<string, number> = {};
-    monthlyEntries
+    // Raw month: an income-tracking business's bills are not in the
+    // personal entries, and this chip is exactly where they are reviewed.
+    rawMonthlyEntries
       .filter((entry) => entry.type === "expense" && entry.businessId)
       .forEach((entry) => {
         map[entry.category] = (map[entry.category] ?? 0) + entry.amount;
       });
     return map;
-  }, [businessOnly, expensesByCategory, monthlyEntries]);
+  }, [businessOnly, expensesByCategory, rawMonthlyEntries]);
 
   // Override > built-in/custom default, then the per-bucket lists the
   // bucket card renders. See utils/categoryBucketResolve.
@@ -627,9 +651,23 @@ const BudgetScreen: React.FC = () => {
   // earner's recurring income fold into that earner's line (deposits so far
   // + estimate for the rest) instead of each adding a row under the bank's
   // raw text. Same total as monthlyEntries - see incomeRowsForMonth.
+  // Income-tracking businesses are left out here and listed as one profit
+  // line each (budgetMonth.businesses) underneath.
   const incomeRows = useMemo(
-    () => incomeRowsForMonth(entries, selectedMonthKey),
-    [entries, selectedMonthKey]
+    () =>
+      incomeRowsForMonth(
+        trackedBusinessIds.size === 0
+          ? entries
+          : entries.filter(
+              (entry) => !isNettedBusinessEntry(entry, trackedBusinessIds)
+            ),
+        selectedMonthKey
+      ),
+    [entries, selectedMonthKey, trackedBusinessIds]
+  );
+  const businessNameById = useMemo(
+    () => new Map(businesses.map((business) => [business.id, business.name])),
+    [businesses]
   );
   /** Earner line whose paychecks are showing underneath it. */
   const [expandedIncomeId, setExpandedIncomeId] = useState<string | null>(null);
@@ -641,16 +679,18 @@ const BudgetScreen: React.FC = () => {
 
   // W-2 / 1099 rollup for the selected month: 401(k) dollars withheld from
   // paychecks (not part of income totals) and the tax set-aside owed on
-  // 1099 income. monthlyEntries is already recurring-aware.
+  // 1099 income. Deliberately the raw month: withholding and set-asides
+  // follow what was actually paid, business income included.
   const paycheckSummary = useMemo(
-    () => summarizePaychecks(monthlyEntries),
-    [monthlyEntries]
+    () => summarizePaychecks(rawMonthlyEntries),
+    [rawMonthlyEntries]
   );
 
   const expenseRows = useMemo<ExpenseCategoryRow[]>(
     () =>
       buildExpenseCategoryRows({
-        monthlyEntries,
+        // "Business only" reviews every business's bills, netted or not.
+        monthlyEntries: businessOnly ? rawMonthlyEntries : monthlyEntries,
         customCategoryNames,
         spendingByCategory,
         limitByCategory,
@@ -667,6 +707,7 @@ const BudgetScreen: React.FC = () => {
       entriesById,
       limitByCategory,
       monthlyEntries,
+      rawMonthlyEntries,
       recordedDebtPaymentsForMonth,
       selectedMonthDate,
       spendingByCategory,
@@ -1408,7 +1449,7 @@ const BudgetScreen: React.FC = () => {
             {t("budget.screen.summary.plannedMinimums", { amount: formatCurrency(plannedDebtMinimumTotal) })}
           </Text>
         )}
-        {incomeRows.length > 0 && (
+        {(incomeRows.length > 0 || budgetMonth.businesses.length > 0) && (
           <View style={styles.incomeSummaryList}>
             {incomeRows.map(({ entry, paychecks, amount, projection }) => {
               const expanded = projection !== null && expandedIncomeId === entry.id;
@@ -1493,6 +1534,80 @@ const BudgetScreen: React.FC = () => {
                           {formatCurrency(entry.amount)}
                         </Text>
                       </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+            {budgetMonth.businesses.map((line) => {
+              // One line per income-tracking business: its profit is what
+              // counts as income, nothing in a loss month. Opens to the
+              // business's own entries so they stay reachable for editing.
+              const rowId = `business:${line.businessId}`;
+              const expanded = expandedIncomeId === rowId;
+              return (
+                <View key={rowId}>
+                  <TouchableOpacity
+                    style={styles.incomeSummaryRow}
+                    onPress={() => setExpandedIncomeId(expanded ? null : rowId)}
+                    activeOpacity={0.6}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded }}
+                  >
+                    <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
+                      {expanded ? "▾ " : "▸ "}💼{" "}
+                      {businessNameById.get(line.businessId) ??
+                        t("budget.spending.spendingCard.deletedBusiness")}
+                    </Text>
+                    <View style={styles.incomeSummaryRight}>
+                      <Text
+                        style={[
+                          styles.incomeSummaryTag,
+                          { color: line.net < 0 ? colors.textDim : colors.accent },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {line.net < 0
+                          ? t("budget.screen.summary.businessLoss", {
+                              amount: formatCurrency(-line.net),
+                            })
+                          : t("budget.screen.summary.businessProfit")}
+                      </Text>
+                      <Text style={[styles.incomeSummaryAmount, { color: colors.success }]}>
+                        {formatCurrency(line.profit)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  {expanded && (
+                    <View style={styles.incomePaycheckList}>
+                      {line.entries.map((businessEntry) => (
+                        <TouchableOpacity
+                          key={businessEntry.id}
+                          style={styles.incomeSummaryRow}
+                          onPress={() => handleEditEntry(businessEntry.id)}
+                          activeOpacity={0.6}
+                          accessibilityRole="button"
+                        >
+                          <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
+                            {businessEntry.description ||
+                              categoryLabel(t, businessEntry.category)}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.incomeSummaryAmount,
+                              {
+                                color:
+                                  businessEntry.type === "income"
+                                    ? colors.success
+                                    : colors.textDim,
+                              },
+                            ]}
+                          >
+                            {businessEntry.type === "income" ? "+" : "-"}
+                            {formatCurrency(businessEntry.amount)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
                     </View>
                   )}
                 </View>

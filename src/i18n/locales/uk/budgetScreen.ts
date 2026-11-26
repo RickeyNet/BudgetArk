@@ -39,6 +39,8 @@ export const budgetScreen: LocalizedPlural<typeof en> = {
     paychecksAllIn_many: "{{count}} виплат отримано",
     paychecksAllIn_other: "{{count}} виплати отримано",
     monthlyEstimate: "Оцінка на місяць · торкніться, щоб змінити",
+    businessProfit: "прибуток",
+    businessLoss: "збиток {{amount}} · не враховується",
     deletedPerson: "(видалена людина)",
   },
   selection: {

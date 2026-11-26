@@ -17,7 +17,8 @@
  */
 
 import type { BudgetEntry, CategoryBudgetLimit } from "../types";
-import { describeFulfillment, entriesForMonth } from "./billFulfillment";
+import { describeFulfillment } from "./billFulfillment";
+import { personalEntriesForMonth } from "./businessProfit";
 import { t } from "../i18n/translate";
 
 export interface TrackingStripRow {
@@ -64,7 +65,8 @@ export const buildTrackingStrip = ({
   const live = entries.filter((e) => !e.deletedAt);
 
   const spentThisMonth = round2(
-    entriesForMonth(live, monthKey)
+    // Household spending - see utils/businessProfit.
+    personalEntriesForMonth(live, monthKey)
       .filter((e) => e.type === "expense")
       .reduce((sum, e) => sum + e.amount, 0)
   );

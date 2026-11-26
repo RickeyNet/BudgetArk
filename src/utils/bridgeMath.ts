@@ -40,7 +40,7 @@ import {
   QUOTE_REFRESH_INTERVAL_MS,
   type HoldingValueOptions,
 } from "./holdingsMath";
-import { entriesForMonth } from "./billFulfillment";
+import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 import { t } from "../i18n/translate";
 
 /** How many trailing months the Bridge cash-flow panel shows by default. */
@@ -74,12 +74,16 @@ export const buildTrailingCashFlow = (
   months: number = TRAILING_CASH_FLOW_MONTHS,
 ): TrailingCashFlowPoint[] => {
   const buckets: TrailingCashFlowPoint[] = [];
+  // An income-tracking business adds its monthly profit, nothing else
+  // (utils/businessProfit).
+  const tracked = incomeTrackedBusinessIds(entries);
   for (let offset = months - 1; offset >= 0; offset--) {
     const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
     const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    let income = 0;
+    const month = personalMonth(entries, monthKey, tracked);
+    let income = month.businessProfit;
     let expense = 0;
-    for (const entry of entriesForMonth(entries, monthKey)) {
+    for (const entry of month.entries) {
       if (entry.type === "income") income += entry.amount;
       else expense += entry.amount;
     }

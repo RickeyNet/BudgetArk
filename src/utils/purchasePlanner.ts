@@ -20,7 +20,7 @@ import type {
 } from "../types";
 import { getMonthKey } from "./budgetMonths";
 import { calcMonthsToPayoff, calcTotalInterest } from "./calculations";
-import { entriesForMonth } from "./billFulfillment";
+import { incomeTrackedBusinessIds, personalMonth } from "./businessProfit";
 import { parseMoneyInput } from "./parseMoneyInput";
 import { t } from "../i18n/translate";
 
@@ -63,8 +63,14 @@ export const calcMonthlyCashFlow = (
   let incomeTotal = 0;
   let expenseTotal = 0;
 
+  // An income-tracking business adds its monthly profit, nothing else
+  // (utils/businessProfit).
+  const tracked = incomeTrackedBusinessIds(entries);
   for (const monthKey of monthKeys) {
-    for (const entry of entriesForMonth(entries, monthKey)) {
+    const month = personalMonth(entries, monthKey, tracked);
+    if (month.businesses.length > 0) monthsTracked.add(monthKey);
+    incomeTotal += month.businessProfit;
+    for (const entry of month.entries) {
       monthsTracked.add(monthKey);
       if (entry.type === "income") incomeTotal += entry.amount;
       else if (entry.type === "expense") expenseTotal += entry.amount;

@@ -33,6 +33,7 @@ import type {
 } from "../types";
 import { t } from "../i18n/translate";
 import { entriesForMonth } from "../utils/billFulfillment";
+import { personalEntriesForMonth } from "../utils/businessProfit";
 import { resolveEmergencyFundAmount } from "../utils/emergencyFund";
 import { CHAPTERS } from "./lessonChapters";
 import { hasLessonBody } from "./lessonIndex";
@@ -155,7 +156,8 @@ const underBudgetMonths = (ctx: AchievementContext): string[] => {
     if (!limits || limits.length === 0) continue;
 
     const spend: Partial<Record<string, number>> = {};
-    for (const e of entriesForMonth(ctx.budgetEntries, monthKey)) {
+    // Household spending, as the limits sheet counts it (utils/businessProfit).
+    for (const e of personalEntriesForMonth(ctx.budgetEntries, monthKey)) {
       if (e.type !== "expense") continue;
       if (!Number.isFinite(e.amount) || e.amount <= 0) continue;
       spend[e.category] = (spend[e.category] ?? 0) + e.amount;
