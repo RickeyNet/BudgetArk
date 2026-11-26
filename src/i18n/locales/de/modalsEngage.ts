@@ -139,6 +139,7 @@ export const modalsEngage: Localized<typeof en> = {
     title: "Update bereit",
     defaultMessage: "Ein neues Update ist bereit zur Installation.",
     moreInReleaseNotes: "+{{n}} weitere in den Versionshinweisen",
+    fullDetailsAfterInstall: "Alle Details stehen nach der Installation unter Profil → Versionshinweise.",
     published: "Veröffentlicht {{when}}",
     later: "Später",
     installNow: "Jetzt installieren",

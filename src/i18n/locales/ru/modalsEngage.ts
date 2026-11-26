@@ -139,6 +139,7 @@ export const modalsEngage: LocalizedPlural<typeof en> = {
     title: "Обновление готово",
     defaultMessage: "Новое обновление готово к установке.",
     moreInReleaseNotes: "+ещё {{n}} в разделе «Что нового»",
+    fullDetailsAfterInstall: "Все подробности — в разделе «Профиль» → «Что нового» после установки.",
     published: "Опубликовано {{when}}",
     later: "Позже",
     installNow: "Установить сейчас",

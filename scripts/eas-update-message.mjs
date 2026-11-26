@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Emit the top RELEASE_NOTES entry as a JSON string suitable for
- * `eas update --message`. The running (older) bundle parses this payload
+ * `eas update --message`, with each highlight cut down to its headline. The running (older) bundle parses this payload
  * out of the manifest so the OTA prompt can show highlights for the
  * incoming version even though that version isn't in the user's baked-in
  * RELEASE_NOTES list yet.
@@ -93,5 +93,29 @@ if (!version || !title || !releasedAt || highlights.length === 0) {
   process.exit(1);
 }
 
-const payload = { version, title, releasedAt, highlights };
+// Headlines only: the Update Ready dialog is a nudge to install, not the
+// changelog. Summarizing here (not just in the app) means bundles already in
+// the field - which print each highlight verbatim - get the short form too.
+// The full text ships inside the update and shows on the Release Notes
+// screen once it installs.
+//
+// Mirror of summarizeHighlight in src/utils/updateReleaseNotes.ts (this
+// script can't import TypeScript). releaseNotes.test.ts fails if they drift.
+const HIGHLIGHT_SUMMARY_MAX = 100;
+const summarizeHighlight = (highlight) => {
+  const text = highlight.trim().replace(/\s+/g, " ");
+  const sentence = text.match(/^.*?[.!?](?=\s+[A-Z0-9'"(]|$)/)?.[0] ?? text;
+  if (sentence.length <= HIGHLIGHT_SUMMARY_MAX) return sentence;
+  const cut = sentence.slice(0, HIGHLIGHT_SUMMARY_MAX - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  const head = (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:.\-]+$/, "");
+  return `${head}\u2026`;
+};
+
+const payload = {
+  version,
+  title,
+  releasedAt,
+  highlights: highlights.map(summarizeHighlight),
+};
 process.stdout.write(JSON.stringify(payload));

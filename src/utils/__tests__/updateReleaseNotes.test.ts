@@ -3,6 +3,8 @@ import {
   findReleaseNoteForVersion,
   tryParseReleaseNoteFromMessage,
   resolveUpdateInfo,
+  summarizeHighlight,
+  HIGHLIGHT_SUMMARY_MAX,
 } from "../updateReleaseNotes";
 
 // Controlled, newest-first release list (matches the real data's ordering, on
@@ -116,5 +118,52 @@ describe("resolveUpdateInfo", () => {
   it("tolerates a non-object manifest", () => {
     const info = resolveUpdateInfo(null, "9.9.9");
     expect(info.message).toBe("A new update is ready to install.");
+  });
+});
+
+describe("summarizeHighlight", () => {
+  it("keeps only the headline sentence", () => {
+    expect(
+      summarizeHighlight(
+        "Refunds are no longer counted as income. When money comes back, tick the box."
+      )
+    ).toBe("Refunds are no longer counted as income.");
+  });
+
+  it("returns a single short sentence unchanged", () => {
+    expect(summarizeHighlight("Rental properties get tenants.")).toBe(
+      "Rental properties get tenants."
+    );
+    expect(summarizeHighlight("No full stop here")).toBe("No full stop here");
+  });
+
+  it("does not split on dots inside a domain, a number or a version", () => {
+    expect(
+      summarizeHighlight("About now links to budgetark.app for $1.50 in v1.2.3. More detail.")
+    ).toBe("About now links to budgetark.app for $1.50 in v1.2.3.");
+  });
+
+  it("does not end the headline before a lowercase continuation", () => {
+    expect(summarizeHighlight("Works with banks, cards, etc. and more. Then detail.")).toBe(
+      "Works with banks, cards, etc. and more."
+    );
+  });
+
+  it("cuts an overlong headline at a word boundary with an ellipsis", () => {
+    const long = `${"word ".repeat(40).trim()}. Detail after.`;
+    const out = summarizeHighlight(long);
+    expect(out.length).toBeLessThanOrEqual(HIGHLIGHT_SUMMARY_MAX);
+    expect(out.endsWith("word\u2026")).toBe(true);
+  });
+
+  it("is idempotent - the OTA message arrives already summarized", () => {
+    for (const input of [
+      "Refunds are no longer counted as income. When money comes back, tick the box.",
+      `${"word ".repeat(40).trim()}, and then some: more. Detail.`,
+      "  Padded   and\nwrapped. Detail.",
+    ]) {
+      const once = summarizeHighlight(input);
+      expect(summarizeHighlight(once)).toBe(once);
+    }
   });
 });

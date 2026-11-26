@@ -139,6 +139,7 @@ export const modalsEngage: Localized<typeof en> = {
     title: "Uppdatering klar",
     defaultMessage: "En ny uppdatering är klar att installera.",
     moreInReleaseNotes: "+{{n}} till i versionsinformationen",
+    fullDetailsAfterInstall: "Alla detaljer finns under Profil → Versionsinformation efter installationen.",
     published: "Publicerad {{when}}",
     later: "Senare",
     installNow: "Installera nu",

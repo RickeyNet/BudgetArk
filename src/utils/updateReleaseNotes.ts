@@ -27,6 +27,33 @@ export const findReleaseNoteForVersion = (version?: string): ReleaseNote | undef
     : undefined;
 };
 
+/** Longest headline the update / what's-new dialogs show per highlight. */
+export const HIGHLIGHT_SUMMARY_MAX = 100;
+
+/**
+ * Reduce a release-note highlight to its headline for the update and
+ * what's-new dialogs. Highlights are written headline-first ("Refunds are no
+ * longer counted as income. When money comes back ..."), so the first
+ * sentence is the basics and the rest is detail that belongs on the Release
+ * Notes screen. A headline that still runs long is cut at a word boundary.
+ *
+ * Idempotent, deliberately: scripts/eas-update-message.mjs stamps the OTA
+ * message with already-summarized highlights (so bundles that predate this
+ * helper show the short form too) and this runs over them again on display.
+ * Keep the two implementations in step - releaseNotes.test.ts compares them.
+ */
+export const summarizeHighlight = (highlight: string): string => {
+  const text = highlight.trim().replace(/\s+/g, " ");
+  // A sentence ends at . ! ? followed by the start of another sentence (or
+  // the end of the text) - so "budgetark.app" and "$1.50" don't split it.
+  const sentence = text.match(/^.*?[.!?](?=\s+[A-Z0-9'"(]|$)/)?.[0] ?? text;
+  if (sentence.length <= HIGHLIGHT_SUMMARY_MAX) return sentence;
+  const cut = sentence.slice(0, HIGHLIGHT_SUMMARY_MAX - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  const head = (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:.\-]+$/, "");
+  return `${head}\u2026`;
+};
+
 /**
  * Parse a release note carried in the OTA manifest's `message` field as JSON.
  * The publish helper (scripts/eas-update-message.mjs) emits this payload so

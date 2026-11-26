@@ -142,6 +142,7 @@ export const modalsEngage = {
     title: "Update Ready",
     defaultMessage: "A new update is ready to install.",
     moreInReleaseNotes: "+{{n}} more in Release Notes",
+    fullDetailsAfterInstall: "Full details are in Profile → Release Notes after you install.",
     published: "Published {{when}}",
     later: "Later",
     installNow: "Install Now",

@@ -83,7 +83,7 @@ import {
 import { requestArkSetupPrompt } from "./src/storage/arkSetupStorage";
 import { isUpdateSafe } from "./src/utils/versionGuard";
 import { getPrivacyMode } from "./src/storage/privacyStorage";
-import { resolveUpdateInfo } from "./src/utils/updateReleaseNotes";
+import { resolveUpdateInfo, summarizeHighlight } from "./src/utils/updateReleaseNotes";
 
 const FlagSecureModule = Platform.OS === "android" ? NativeModules.FlagSecureModule : null;
 const ScreenGuardModule = Platform.OS === "ios" ? NativeModules.ScreenGuardModule : null;
@@ -639,7 +639,7 @@ const AppContent: React.FC = () => {
                   </Text>
                   {pendingUpdate.releaseNote.highlights.slice(0, 4).map((line, i) => (
                     <Text key={`${pendingUpdate.releaseNote?.version}-${i}`} style={[styles.dialogBullet, { color: colors.textDim }]}>
-                      {"\u2022"} {line}
+                      {"\u2022"} {summarizeHighlight(line)}
                     </Text>
                   ))}
                   {pendingUpdate.releaseNote.highlights.length > 4 ? (
@@ -649,6 +649,12 @@ const AppContent: React.FC = () => {
                       })}
                     </Text>
                   ) : null}
+                  {/* Headlines only above - say where the detail lives. Not a
+                      button: this (older) bundle's Release Notes screen
+                      doesn't have the incoming version until it installs. */}
+                  <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
+                    {t("modals.engage.updateReady.fullDetailsAfterInstall")}
+                  </Text>
                 </>
               ) : (
                 <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
@@ -706,7 +712,7 @@ const AppContent: React.FC = () => {
               <Text style={[styles.featureTitle, { color: colors.accent }]}>{latestRelease.title}</Text>
               {latestRelease.highlights.slice(0, 3).map((line, i) => (
                 <Text key={i} style={[styles.dialogBullet, { color: colors.textDim }]}>
-                  {"\u2022"} {line}
+                  {"\u2022"} {summarizeHighlight(line)}
                 </Text>
               ))}
               {latestRelease.highlights.length > 3 && (

@@ -11,9 +11,11 @@
  * release that bumps one but not the other fails CI instead of shipping a
  * store listing that disagrees with the in-app Release Notes screen.
  */
+import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { CURRENT_APP_VERSION, RELEASE_NOTES } from "../releaseNotes";
+import { summarizeHighlight } from "../../utils/updateReleaseNotes";
 
 const SEMVER_RE = /^\d+\.\d+\.\d+$/;
 
@@ -81,5 +83,26 @@ describe("CURRENT_APP_VERSION", () => {
       expo: { version: string };
     };
     expect(CURRENT_APP_VERSION).toBe(appJson.expo.version);
+  });
+});
+
+// The publish script re-implements summarizeHighlight in plain JS (it can't
+// import TypeScript) and regex-parses releaseNotes.ts. Run it for real so a
+// drift between the two, or a top entry the script can't parse, fails here
+// rather than in a user's Update Ready dialog.
+describe("scripts/eas-update-message.mjs", () => {
+  it("stamps the top entry with headline-only highlights", () => {
+    const script = path.join(__dirname, "..", "..", "..", "scripts", "eas-update-message.mjs");
+    const payload = JSON.parse(execFileSync(process.execPath, [script], { encoding: "utf8" })) as {
+      version: string;
+      title: string;
+      releasedAt: string;
+      highlights: string[];
+    };
+    const top = RELEASE_NOTES[0];
+    expect(payload.version).toBe(top.version);
+    expect(payload.title).toBe(top.title);
+    expect(payload.releasedAt).toBe(top.releasedAt);
+    expect(payload.highlights).toEqual(top.highlights.map(summarizeHighlight));
   });
 });
