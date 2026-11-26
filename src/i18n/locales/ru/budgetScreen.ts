@@ -41,6 +41,8 @@ export const budgetScreen: LocalizedPlural<typeof en> = {
     monthlyEstimate: "Оценка на месяц · нажмите, чтобы изменить",
     businessProfit: "прибыль",
     businessLoss: "убыток {{amount}} · не учитывается",
+    businessAddIncome: "+ Доход",
+    businessAddExpense: "+ Расход",
     deletedPerson: "(удалённый человек)",
   },
   selection: {

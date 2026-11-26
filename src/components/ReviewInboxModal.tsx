@@ -435,15 +435,15 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     });
   }, [rules]);
 
-  // A deposit filed against a business's recurring income (a retainer)
-  // belongs to that business: prefill the tag so the estimate it replaces
-  // and the deposit report under the same business. Only fills an empty
+  // A transaction filed against a business's recurring income (a retainer)
+  // or bill belongs to that business: prefill the tag so the estimate it
+  // replaces and the actual report under the same business. Only fills an empty
   // pick - the user's own choice, or "Personal" tapped afterwards, stands.
   const handlePickApplyTo = useCallback(
     (id: string | undefined) => {
       setDraftRecurringId(id);
       const picked = id ? entries.find((entry) => entry.id === id) : undefined;
-      if (picked?.type === "income" && picked.businessId) {
+      if (picked?.businessId) {
         const pickedBusinessId = picked.businessId;
         setDraftBusinessId((prev) => prev ?? pickedBusinessId);
       }

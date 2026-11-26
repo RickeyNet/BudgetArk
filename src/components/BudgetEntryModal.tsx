@@ -77,6 +77,8 @@ import {
 } from "../utils/billFulfillment";
 import TagPillPicker from "./TagPillPicker";
 import { useTheme } from "../theme/ThemeProvider";
+import { useBusinesses } from "../people/PeopleProvider";
+import { incomeTrackedBusinessIds } from "../utils/businessProfit";
 import type { ThemeColors } from "../theme/themes";
 import CategoryPillPicker from "./CategoryPillPicker";
 import MonthDayCalendar from "./MonthDayCalendar";
@@ -168,6 +170,12 @@ interface BudgetEntryModalProps {
    * closed -> open edge only, like initialCategory.
    */
   initialBill?: { bill: BudgetEntry; yearMonth: string };
+  /**
+   * add mode: open already tagged to this business as the given type (the
+   * "+ Income" / "+ Expense" actions on a business's line in the Budget
+   * tab's income box). Applied on the closed -> open edge only.
+   */
+  initialBusiness?: { businessId: string; type: BudgetEntryType };
 }
 
 let nextLineId = 0;
@@ -290,6 +298,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   people = [],
   entries = [],
   initialBill,
+  initialBusiness,
 }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -321,6 +330,11 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const [businessId, setBusinessId] = useState<string | undefined>(
     initialForm.businessId
   );
+  // Inline "+ New business" form under the business picker.
+  const [newBusinessOpen, setNewBusinessOpen] = useState(false);
+  const [newBusinessName, setNewBusinessName] = useState("");
+  const [newBusinessError, setNewBusinessError] = useState<string | null>(null);
+  const [addingBusiness, setAddingBusiness] = useState(false);
   const [personIds, setPersonIds] = useState<string[]>(initialForm.personIds);
   const [incomeType, setIncomeType] = useState<IncomeType | undefined>(
     initialForm.incomeType
@@ -396,6 +410,9 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   // pattern as the `entry` sync above) rather than an effect, so the
   // prefilled form paints in one pass with no setState inside an effect.
   if (useValueChanged(visible) && visible) {
+    setNewBusinessOpen(false);
+    setNewBusinessName("");
+    setNewBusinessError(null);
     if (initialCategory) {
       setType("expense");
       setCategory(initialCategory);
@@ -406,9 +423,15 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       setYearMonth(initialBill.yearMonth);
       setRecurring(false);
       setFulfillsRecurringId(initialBill.bill.id);
+      // The real charge for a business's bill is the business's expense too.
+      setBusinessId(initialBill.bill.businessId);
       setLines([
         { ...createEmptyLine(), description: initialBill.bill.description ?? "" },
       ]);
+    }
+    if (initialBusiness) {
+      setType(initialBusiness.type);
+      setBusinessId(initialBusiness.businessId);
     }
   }
 
@@ -482,12 +505,67 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
 
   // Business tagging covers expenses and income (a client's payment is the
-  // business's income); the row appears once the user has created a
-  // business - or, in edit mode, when the entry is already tagged with a
-  // business that has since been deleted (the user must be able to untag).
-  const showBusinessPicker = businesses.length > 0 || !!businessId;
+  // business's income). The row is always there: with no business yet it
+  // is just the "+ New business" pill, so someone entering by hand can
+  // start tracking a business from the form instead of having to find
+  // Profile -> Businesses first.
   const taggedBusinessMissing =
     !!businessId && !businesses.some((b) => b.id === businessId);
+  // A business with income tagged to it is netted (utils/businessProfit):
+  // its expenses come out of its profit, not personal spending - the
+  // expense hint has to say so.
+  const selectedBusinessNetted = useMemo(
+    () => !!businessId && incomeTrackedBusinessIds(entries).has(businessId),
+    [businessId, entries]
+  );
+
+  const { addBusiness } = useBusinesses();
+
+  const closeNewBusiness = useCallback(() => {
+    setNewBusinessOpen(false);
+    setNewBusinessName("");
+    setNewBusinessError(null);
+  }, []);
+
+  /** Creates the business and tags this entry to it in one step. */
+  const handleCreateBusiness = useCallback(async () => {
+    if (addingBusiness) return;
+    setAddingBusiness(true);
+    setNewBusinessError(null);
+    try {
+      const knownIds = new Set(businesses.map((b) => b.id));
+      const result = await addBusiness(newBusinessName);
+      if (result.ok) {
+        const created = result.businesses.find((b) => !knownIds.has(b.id));
+        if (created) setBusinessId(created.id);
+        closeNewBusiness();
+      } else {
+        setNewBusinessError(result.error);
+      }
+    } catch {
+      // A storage failure must not leave the button stuck disabled.
+      setNewBusinessError(t("budget.entry.business.newError"));
+    } finally {
+      setAddingBusiness(false);
+    }
+  }, [addBusiness, addingBusiness, businesses, closeNewBusiness, newBusinessName, t]);
+
+  /**
+   * Filing an entry against a business's recurring bill or income makes it
+   * that business's too - otherwise the actual would land in the personal
+   * budget while its estimate sat in the business. Never overrides a
+   * business the user already picked.
+   */
+  const handlePickRecurring = useCallback(
+    (id: string | undefined) => {
+      setFulfillsRecurringId(id);
+      const pickedBusinessId = id
+        ? entries.find((candidate) => candidate.id === id)?.businessId
+        : undefined;
+      if (pickedBusinessId) setBusinessId((prev) => prev ?? pickedBusinessId);
+    },
+    [entries]
+  );
 
   // People assignment mirrors the business picker (appears once a person
   // exists, must allow untagging a deleted person) except that it's
@@ -638,7 +716,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         recurrenceInterval: recurring ? recurrenceInterval : undefined,
         paymentUrl: normalizedPaymentUrl,
         linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
-        businessId: showBusinessPicker ? businessId : undefined,
+        businessId,
         ...personAssignmentFields(
           type === "expense"
             ? (showPersonPicker ? personIds : [])
@@ -704,7 +782,6 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     showLoanField,
     retirementContribution,
     showAccountPicker,
-    showBusinessPicker,
     showDayPicker,
     showPersonPicker,
     taxSetAsideRate,
@@ -1231,7 +1308,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               }),
             }))}
             value={fulfillsRecurringId}
-            onChange={setFulfillsRecurringId}
+            onChange={handlePickRecurring}
             noneLabel={t("budget.entry.bill.none")}
             glyph="🧾"
           />
@@ -1254,7 +1331,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               }),
             }))}
             value={fulfillsRecurringId}
-            onChange={setFulfillsRecurringId}
+            onChange={handlePickRecurring}
             noneLabel={t("budget.entry.paycheck.none")}
             glyph="👤"
           />
@@ -1503,17 +1580,21 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         </View>
       )}
 
-      {showBusinessPicker && (
-        <View style={styles.field}>
+      <View style={styles.field}>
           <Text style={styles.label}>{t("budget.entry.business.label")}</Text>
           <Text style={styles.accountPickerHint}>
-            {type === "income"
-              ? t("budget.entry.business.hintIncome")
-              : isEdit
-                ? t("budget.entry.business.hintEdit")
-                : t("budget.entry.business.hintAdd")}
+            {businesses.length === 0 && !businessId
+              ? t("budget.entry.business.hintNone")
+              : type === "income"
+                ? t("budget.entry.business.hintIncome")
+                : selectedBusinessNetted
+                  ? t("budget.entry.business.hintNetted")
+                  : isEdit
+                    ? t("budget.entry.business.hintEdit")
+                    : t("budget.entry.business.hintAdd")}
           </Text>
           <View style={styles.categoryWrap}>
+            {(businesses.length > 0 || !!businessId) && (
             <TouchableOpacity
               style={[styles.categoryPill, !businessId && styles.categoryPillActive]}
               onPress={() => setBusinessId(undefined)}
@@ -1527,6 +1608,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                 {t("budget.entry.business.personal")}
               </Text>
             </TouchableOpacity>
+            )}
             {businesses.map((business) => (
               <TouchableOpacity
                 key={business.id}
@@ -1556,9 +1638,60 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                 </Text>
               </TouchableOpacity>
             )}
+            {!newBusinessOpen && (
+              <TouchableOpacity
+                style={styles.categoryPill}
+                onPress={() => setNewBusinessOpen(true)}
+                accessibilityRole="button"
+              >
+                <Text style={styles.categoryPillText}>
+                  {t("budget.entry.business.new")}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
+          {newBusinessOpen && (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder={t("budget.entry.business.newPlaceholder")}
+                placeholderTextColor={colors.textMuted}
+                value={newBusinessName}
+                onChangeText={setNewBusinessName}
+                autoFocus
+                maxLength={60}
+                returnKeyType="done"
+                onSubmitEditing={() => void handleCreateBusiness()}
+              />
+              {newBusinessError ? (
+                <Text style={[styles.accountPickerHint, { color: colors.danger }]}>
+                  {newBusinessError}
+                </Text>
+              ) : null}
+              <View style={styles.categoryWrap}>
+                <TouchableOpacity
+                  style={[styles.categoryPill, styles.categoryPillActive]}
+                  onPress={() => void handleCreateBusiness()}
+                  disabled={addingBusiness || newBusinessName.trim().length === 0}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.categoryPillText, styles.categoryPillTextActive]}>
+                    {t("budget.entry.business.newAdd")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.categoryPill}
+                  onPress={closeNewBusiness}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.categoryPillText}>
+                    {t("budget.entry.business.newCancel")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
-      )}
 
       {showPersonPicker && (
         <View style={styles.field}>

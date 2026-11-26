@@ -39,6 +39,8 @@ export const budgetScreen = {
     /** Income-list line for a business the user tracks income for: its profit counts, a loss does not. */
     businessProfit: "profit",
     businessLoss: "{{amount}} loss · not counted",
+    businessAddIncome: "+ Income",
+    businessAddExpense: "+ Expense",
     deletedPerson: "(deleted person)",
   },
   selection: {

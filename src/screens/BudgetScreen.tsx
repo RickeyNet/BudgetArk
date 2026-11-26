@@ -262,6 +262,10 @@ const BudgetScreen: React.FC = () => {
     { category: CategoryName; nonce: number } | null
   >(null);
   /** "Log actual" target: the add sheet opens prefilled as this bill's charge. */
+  /** "+ Income" / "+ Expense" on a business's income-box line. */
+  const [addForBusiness, setAddForBusiness] = useState<
+    { businessId: string; type: "income" | "expense" } | undefined
+  >(undefined);
   const [logActualBill, setLogActualBill] = useState<
     { bill: BudgetEntry; yearMonth: string } | undefined
   >(undefined);
@@ -814,6 +818,7 @@ const BudgetScreen: React.FC = () => {
       setShowAddModal(false);
       setQuickAddCategory(undefined);
       setLogActualBill(undefined);
+      setAddForBusiness(undefined);
     }
     triggerHaptic("success");
     void notifyAchievementCheck();
@@ -1610,6 +1615,33 @@ const BudgetScreen: React.FC = () => {
                           </Text>
                         </TouchableOpacity>
                       ))}
+                      {/* Add straight to this business - the manual path's
+                          answer to the Review Inbox's business picker. */}
+                      <View style={styles.businessAddRow}>
+                        {(["income", "expense"] as const).map((entryType) => (
+                          <TouchableOpacity
+                            key={entryType}
+                            style={styles.businessAddButton}
+                            onPress={() => {
+                              setAddForBusiness({
+                                businessId: line.businessId,
+                                type: entryType,
+                              });
+                              setShowAddModal(true);
+                            }}
+                            activeOpacity={0.6}
+                            accessibilityRole="button"
+                          >
+                            <Text style={styles.businessAddText}>
+                              {t(
+                                entryType === "income"
+                                  ? "budget.screen.summary.businessAddIncome"
+                                  : "budget.screen.summary.businessAddExpense"
+                              )}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     </View>
                   )}
                 </View>
@@ -1964,10 +1996,12 @@ const BudgetScreen: React.FC = () => {
           setShowAddModal(false);
           setQuickAddCategory(undefined);
           setLogActualBill(undefined);
+          setAddForBusiness(undefined);
         }}
         onAdd={handleAddEntry}
         initialCategory={quickAddCategory}
         initialBill={logActualBill}
+        initialBusiness={addForBusiness}
         entries={entries}
         assetAccounts={assetAccounts}
         customCategories={customCategories}
@@ -2464,6 +2498,23 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       paddingLeft: 10,
       borderLeftWidth: 1,
       borderLeftColor: colors.cardBorder,
+    },
+    businessAddRow: {
+      flexDirection: "row",
+      gap: 8,
+      paddingVertical: 6,
+    },
+    businessAddButton: {
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
+    businessAddText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: colors.accent,
     },
     incomeSummaryDesc: {
       fontSize: 13,
