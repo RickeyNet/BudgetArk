@@ -131,13 +131,5 @@ export const profileSettings: Localized<typeof en> = {
     modeSavedTitle: "Uppdateringsläge sparat",
     modeManualMessage: "Manuellt läge är på. Appen söker bara efter uppdateringar när du trycker på ”Uppdateringar”.",
     modeAutoMessage: "Automatiska uppdateringskontroller är på.",
-    readyTitle: "Uppdatering redo",
-    readyMessage: "En ny uppdatering är redo att installeras.",
-    published: "Publicerad {{when}}",
-    later: "Senare",
-    installNow: "Installera nu",
-    installFailedTitle: "Installationen misslyckades",
-    installFailedMessage:
-      "Uppdateringen kunde inte tillämpas just nu. Försök igen.",
   },
 };

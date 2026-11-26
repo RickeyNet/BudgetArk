@@ -39,6 +39,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "The Debts tab gets to your debts sooner, and its shortcuts go where you expect. Tapping the payment-due banner before the due day now takes you to that debt with the payment box open, instead of opening the Edit Debt form. Payment History has a Select button for deleting payments - before, the only way was a long press nobody would guess. And the debt-free countdown moved below your debt list, so the first debt shows up without scrolling.",
       "Buttons fit in German and Russian on small phones. Rows of three buttons - Back, Skip and Next in setup and the guided tour, Delete, Cancel and Save on a budget entry, the milestone step actions, and the restore choices in Automatic Backups - cut off their longer labels. They now size to their text and wrap onto a second line when they must, and so does the bottom row of a debt card.",
       "Update pop-ups are shorter. The Update Ready and What's New messages now show just a one-line headline for each change instead of the full write-up. The full details are still there when you want them, under Profile → Release Notes.",
+      "Only one Update Ready message appears. Tapping Check for Updates while the app was already downloading an update in the background could show two Update Ready messages stacked on top of each other. There is now a single update check and a single message.",
     ],
   },
   {

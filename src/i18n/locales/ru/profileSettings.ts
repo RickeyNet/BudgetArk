@@ -131,12 +131,5 @@ export const profileSettings: LocalizedPlural<typeof en> = {
     modeSavedTitle: "Режим обновлений сохранён",
     modeManualMessage: "Включён ручной режим. Приложение будет проверять обновления, только когда ты нажмёшь «Обновления».",
     modeAutoMessage: "Автоматическая проверка обновлений включена.",
-    readyTitle: "Обновление готово",
-    readyMessage: "Новое обновление готово к установке.",
-    published: "Опубликовано {{when}}",
-    later: "Позже",
-    installNow: "Установить сейчас",
-    installFailedTitle: "Ошибка установки",
-    installFailedMessage: "Сейчас не удалось применить обновление. Попробуй ещё раз.",
   },
 };

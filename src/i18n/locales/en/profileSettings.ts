@@ -141,12 +141,5 @@ export const profileSettings = {
     modeSavedTitle: "Update Mode Saved",
     modeManualMessage: "Manual mode is on. The app will only check for updates when you tap Updates.",
     modeAutoMessage: "Automatic update checks are enabled.",
-    readyTitle: "Update Ready",
-    readyMessage: "A new update is ready to install.",
-    published: "Published {{when}}",
-    later: "Later",
-    installNow: "Install Now",
-    installFailedTitle: "Install Failed",
-    installFailedMessage: "The update could not be applied right now. Please try again.",
   },
 } as const;

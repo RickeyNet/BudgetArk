@@ -131,12 +131,5 @@ export const profileSettings: LocalizedPlural<typeof en> = {
     modeSavedTitle: "Режим оновлень збережено",
     modeManualMessage: "Увімкнено ручний режим. Застосунок перевірятиме оновлення, лише коли ти натиснеш «Оновлення».",
     modeAutoMessage: "Автоматичну перевірку оновлень увімкнено.",
-    readyTitle: "Оновлення готове",
-    readyMessage: "Нове оновлення готове до встановлення.",
-    published: "Опубліковано {{when}}",
-    later: "Пізніше",
-    installNow: "Установити зараз",
-    installFailedTitle: "Помилка встановлення",
-    installFailedMessage: "Зараз не вдалося застосувати оновлення. Спробуй ще раз.",
   },
 };

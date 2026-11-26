@@ -131,13 +131,5 @@ export const profileSettings: Localized<typeof en> = {
     modeSavedTitle: "Update-Modus gespeichert",
     modeManualMessage: "Manueller Modus ist ein. Die App sucht nur nach Updates, wenn du auf „Updates“ tippst.",
     modeAutoMessage: "Automatische Update-Prüfung ist aktiviert.",
-    readyTitle: "Update bereit",
-    readyMessage: "Ein neues Update ist bereit zur Installation.",
-    published: "Veröffentlicht {{when}}",
-    later: "Später",
-    installNow: "Jetzt installieren",
-    installFailedTitle: "Installation fehlgeschlagen",
-    installFailedMessage:
-      "Das Update konnte gerade nicht angewendet werden. Bitte versuche es erneut.",
   },
 };

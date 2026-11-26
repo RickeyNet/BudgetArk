@@ -131,13 +131,5 @@ export const profileSettings: Localized<typeof en> = {
     modeSavedTitle: "Oppdateringsmodus lagret",
     modeManualMessage: "Manuell modus er på. Appen ser bare etter oppdateringer når du trykker på «Oppdateringer».",
     modeAutoMessage: "Automatiske oppdateringssjekker er på.",
-    readyTitle: "Oppdatering klar",
-    readyMessage: "En ny oppdatering er klar til å installeres.",
-    published: "Publisert {{when}}",
-    later: "Senere",
-    installNow: "Installer nå",
-    installFailedTitle: "Installasjonen mislyktes",
-    installFailedMessage:
-      "Oppdateringen kunne ikke tas i bruk nå. Prøv igjen.",
   },
 };

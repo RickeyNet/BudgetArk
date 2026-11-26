@@ -4,8 +4,9 @@
  *
  * The SETTINGS card: currency & locale (with the convert-or-relabel prompt),
  * privacy mode, Live Holdings opt-in (with its off-device disclosure),
- * haptics, tracking reminders, and OTA update checks (with the update-ready
- * dialog). The card is collapsed by default - only the Check for Updates
+ * haptics, tracking reminders, and the OTA "Check for Updates" row (the
+ * check and its update-ready dialog live in AppContent - see
+ * UpdateCheckContext). The card is collapsed by default - only the Check for Updates
  * row and a "More settings" row under it are visible, and that row drops
  * the rest down (user request; a header toggle was tried first and went
  * unnoticed). Owns all of that state and loads its own persisted prefs.
@@ -28,10 +29,8 @@ import {
   Text,
   TouchableOpacity,
   Modal,
-  ScrollView,
   ActivityIndicator,
 } from "react-native";
-import * as Updates from "expo-updates";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type {
@@ -40,22 +39,15 @@ import type {
   HoldingsSettings,
   ExchangeRatesSettings,
 } from "../../types";
-import { CURRENT_APP_VERSION } from "../../data/releaseNotes";
 import {
   getUpdatePreferences,
-  setLastUpdateCheckAt,
   setManualUpdateMode,
 } from "../../storage/updatePreferencesStorage";
-import { setOtaUpdateInstalled } from "../../storage/releaseNotesStorage";
 import { useCurrency } from "../../currency/CurrencyProvider";
 import { getCurrencyPreferenceOption } from "../../utils/currencyPreferences";
 import { convertAllStoredData } from "../../utils/currencyMigration";
 import { getCurrentRates, type RatesSnapshot } from "../../utils/exchangeRates";
-import { isUpdateSafe } from "../../utils/versionGuard";
-import {
-  resolveUpdateInfo,
-  findReleaseNoteForVersion,
-} from "../../utils/updateReleaseNotes";
+import { useUpdateCheck } from "../../components/UpdateCheckContext";
 import { getPrivacyMode, setPrivacyMode } from "../../storage/privacyStorage";
 import { getAppLockRecord } from "../../storage/appLockStorage";
 import AppLockSetupModal from "../../components/AppLockSetupModal";
@@ -94,14 +86,6 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
 import { formatDateTime } from "./formatDateTime";
-
-type UpdateMetadata = {
-  id: string;
-  message: string;
-  createdAt?: string;
-  runtimeVersion?: string;
-  appVersion?: string;
-};
 
 /** Settings-row subtext summarizing the current tracking-reminder setup. */
 const reminderRowSubtext = (
@@ -241,11 +225,9 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
   const [updatePrefs, setUpdatePrefs] = useState<UpdatePreferences>({
     manualUpdateMode: false,
   });
-  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
-  const [pendingUpdate, setPendingUpdate] = useState<UpdateMetadata | null>(
-    null,
-  );
-  const canCheckUpdates = !__DEV__ && Updates.isEnabled;
+  // The check itself and the "Update Ready" dialog live in AppContent - this
+  // row only asks for a check and reports the outcomes that have no dialog.
+  const { checkForUpdatesNow, isCheckingUpdates } = useUpdateCheck();
 
   /** Privacy mode - blocks screenshots/screen recording when enabled */
   const [privacyMode, setPrivacyModeState] = useState(false);
@@ -484,115 +466,72 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
     t,
   ]);
 
-  const extractUpdateMetadata = useCallback(
-    (manifest: unknown): UpdateMetadata => {
-      const data =
-        manifest != null && typeof manifest === "object"
-          ? (manifest as Record<string, unknown>)
-          : {};
-      const resolved = resolveUpdateInfo(manifest, CURRENT_APP_VERSION);
+  const checkForUpdates = useCallback(async () => {
+    const outcome = await checkForUpdatesNow();
+    // The check stamps "last checked" - refresh the row's subtext.
+    if (outcome.status !== "unavailable") {
+      setUpdatePrefs(await getUpdatePreferences());
+    }
 
-      return {
-        id: typeof data.id === "string" ? data.id : "unknown",
-        createdAt: resolved.createdAt,
-        runtimeVersion: resolved.runtimeVersion,
-        message: resolved.message,
-        appVersion: resolved.appVersion,
-      };
-    },
-    [],
-  );
-
-  const checkForUpdates = useCallback(
-    async (source: "auto" | "manual") => {
-      if (isCheckingUpdates) return;
-      if (!canCheckUpdates) {
-        if (source === "manual") {
-          showInfo({
-            title: t("profile.settings.updates.unavailableTitle"),
-            message: t("profile.settings.updates.unavailableMessage"),
-          });
-        }
+    switch (outcome.status) {
+      case "ready":
+      case "skipped":
+        // "ready" is presented by AppContent's Update Ready dialog.
         return;
+      case "unavailable":
+        showInfo({
+          title: t("profile.settings.updates.unavailableTitle"),
+          message: t("profile.settings.updates.unavailableMessage"),
+        });
+        return;
+      case "upToDate":
+        showInfo({
+          title: t("profile.settings.updates.upToDateTitle"),
+          message: t("profile.settings.updates.upToDateMessage", {
+            when: formatDateTime(outcome.checkedAt),
+          }),
+        });
+        return;
+      case "rejected":
+        showInfo({
+          title: t("profile.settings.updates.rejectedTitle"),
+          message: t("profile.settings.updates.rejectedMessage"),
+        });
+        return;
+      case "error": {
+        const raw = outcome.message;
+        const lower = raw.toLowerCase();
+        const networkHints = [
+          "failed to check",
+          "failed to download",
+          "network",
+          "timeout",
+          "timed out",
+          "offline",
+          "resolve host",
+          "unreachable",
+          "connection",
+          "internet",
+          "enotfound",
+          "econnrefused",
+          "econnreset",
+          "etimedout",
+        ];
+        const isNetworkError = networkHints.some((hint) =>
+          lower.includes(hint),
+        );
+        const friendly = isNetworkError
+          ? t("profile.settings.updates.failedNetwork")
+          : t("profile.settings.updates.failedGeneric");
+        showInfo({
+          title: t("profile.settings.updates.failedTitle"),
+          message: raw
+            ? t("profile.settings.updates.failedDetails", { friendly, details: raw })
+            : friendly,
+        });
       }
-      setIsCheckingUpdates(true);
-
-      try {
-        const checkedAt = new Date().toISOString();
-        const checkResult = await Updates.checkForUpdateAsync();
-        const prefs = await setLastUpdateCheckAt(checkedAt);
-        setUpdatePrefs(prefs);
-
-        if (!checkResult.isAvailable) {
-          if (source === "manual") {
-            showInfo({
-              title: t("profile.settings.updates.upToDateTitle"),
-              message: t("profile.settings.updates.upToDateMessage", {
-                when: formatDateTime(checkedAt),
-              }),
-            });
-          }
-          return;
-        }
-
-        const fetchResult = await Updates.fetchUpdateAsync();
-        const manifest =
-          (fetchResult as Record<string, unknown>).manifest ||
-          (checkResult as Record<string, unknown>).manifest ||
-          null;
-        const updateMeta = extractUpdateMetadata(manifest);
-
-        const currentRuntime = Updates.runtimeVersion ?? undefined;
-        if (!isUpdateSafe(currentRuntime, updateMeta.runtimeVersion)) {
-          if (source === "manual") {
-            showInfo({
-              title: t("profile.settings.updates.rejectedTitle"),
-              message: t("profile.settings.updates.rejectedMessage"),
-            });
-          }
-          return;
-        }
-
-        setPendingUpdate(updateMeta);
-      } catch (error: any) {
-        if (source === "manual") {
-          const raw = (error?.message || String(error) || "").trim();
-          const lower = raw.toLowerCase();
-          const networkHints = [
-            "failed to check",
-            "failed to download",
-            "network",
-            "timeout",
-            "timed out",
-            "offline",
-            "resolve host",
-            "unreachable",
-            "connection",
-            "internet",
-            "enotfound",
-            "econnrefused",
-            "econnreset",
-            "etimedout",
-          ];
-          const isNetworkError = networkHints.some((hint) =>
-            lower.includes(hint),
-          );
-          const friendly = isNetworkError
-            ? t("profile.settings.updates.failedNetwork")
-            : t("profile.settings.updates.failedGeneric");
-          showInfo({
-            title: t("profile.settings.updates.failedTitle"),
-            message: raw
-              ? t("profile.settings.updates.failedDetails", { friendly, details: raw })
-              : friendly,
-          });
-        }
-      } finally {
-        setIsCheckingUpdates(false);
-      }
-    },
-    [canCheckUpdates, extractUpdateMetadata, isCheckingUpdates, showInfo, t],
-  );
+    }
+  }, [checkForUpdatesNow, showInfo, t]);
 
   const toggleManualMode = useCallback(async () => {
     const updated = await setManualUpdateMode(!updatePrefs.manualUpdateMode);
@@ -670,29 +609,6 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
     });
   }, [privacyMode, showInfo, t]);
 
-  const installPendingUpdate = useCallback(async () => {
-    try {
-      // Record whether this dialog actually resolved and showed the notes (same
-      // match logic the modal uses). If it did, the post-reload bootstrap skips
-      // the "what's new" prompt; if it only showed the version, the prompt still
-      // runs after reload so the baked-in notes aren't lost. The auto-install
-      // path in App.tsx records the same signal.
-      const notesShown = !!(
-        findReleaseNoteForVersion(pendingUpdate?.appVersion) ||
-        findReleaseNoteForVersion(pendingUpdate?.message)
-      );
-      await setOtaUpdateInstalled(notesShown);
-      setPendingUpdate(null);
-      await Updates.reloadAsync();
-    } catch (error: any) {
-      showInfo({
-        title: t("profile.settings.updates.installFailedTitle"),
-        message:
-          error?.message || t("profile.settings.updates.installFailedMessage"),
-      });
-    }
-  }, [pendingUpdate, showInfo, t]);
-
   return (
     <>
       {/* ── Settings (privacy, updates) ── */}
@@ -717,7 +633,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
               not a button. */}
           <TouchableOpacity
             style={[styles.groupedRow, isCheckingUpdates && { opacity: 0.7 }]}
-            onPress={() => checkForUpdates("manual")}
+            onPress={() => void checkForUpdates()}
             disabled={isCheckingUpdates}
             accessibilityRole="button"
             accessibilityLabel={t("profile.settings.updates.checkLabel")}
@@ -1193,133 +1109,6 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 </Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Update Ready Modal ── */}
-      <Modal
-        visible={pendingUpdate !== null}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setPendingUpdate(null)}
-      >
-        <View style={styles.dialogOverlay}>
-          <View
-            style={[
-              styles.dialogBox,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.cardBorder,
-                maxHeight: "80%",
-              },
-            ]}
-          >
-            {(() => {
-              const matchedRelease =
-                findReleaseNoteForVersion(pendingUpdate?.appVersion) ||
-                findReleaseNoteForVersion(pendingUpdate?.message);
-              const updateVersion =
-                matchedRelease?.version ?? pendingUpdate?.appVersion;
-
-              return (
-                <>
-                  <Text style={[styles.dialogTitle, { color: colors.text }]}>
-                    {t("profile.settings.updates.readyTitle")}
-                  </Text>
-
-                  {updateVersion ? (
-                    <View
-                      style={[
-                        styles.updateVersionBadge,
-                        { backgroundColor: `${colors.accent}20` },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.updateVersionText,
-                          { color: colors.accent },
-                        ]}
-                      >
-                        v{updateVersion}
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  {matchedRelease ? (
-                    <>
-                      <Text
-                        style={[
-                          styles.updateReleaseTitle,
-                          { color: colors.text },
-                        ]}
-                      >
-                        {matchedRelease.title}
-                      </Text>
-                      <ScrollView
-                        style={styles.updateHighlightsList}
-                        showsVerticalScrollIndicator={false}
-                      >
-                        {matchedRelease.highlights.map((item) => (
-                          <Text
-                            key={item}
-                            style={[
-                              styles.updateHighlight,
-                              { color: colors.textDim },
-                            ]}
-                          >
-                            {"•"} {item}
-                          </Text>
-                        ))}
-                      </ScrollView>
-                    </>
-                  ) : (
-                    <Text
-                      style={[styles.dialogMessage, { color: colors.textDim }]}
-                    >
-                      {pendingUpdate?.message ||
-                        t("profile.settings.updates.readyMessage")}
-                    </Text>
-                  )}
-
-                  {pendingUpdate?.createdAt ? (
-                    <Text
-                      style={[styles.updateMeta, { color: colors.textMuted }]}
-                    >
-                      {t("profile.settings.updates.published", {
-                        when: formatDateTime(pendingUpdate.createdAt),
-                      })}
-                    </Text>
-                  ) : null}
-
-                  <View style={styles.dialogActions}>
-                    <TouchableOpacity
-                      style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
-                      onPress={() => setPendingUpdate(null)}
-                    >
-                      <Text
-                        style={[styles.dialogBtnText, { color: colors.text }]}
-                      >
-                        {t("profile.settings.updates.later")}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.dialogBtn,
-                        { backgroundColor: colors.accent },
-                      ]}
-                      onPress={installPendingUpdate}
-                    >
-                      <Text
-                        style={[styles.dialogBtnText, { color: colors.accentButtonText }]}
-                      >
-                        {t("profile.settings.updates.installNow")}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              );
-            })()}
           </View>
         </View>
       </Modal>

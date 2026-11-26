@@ -84,6 +84,8 @@ import { requestArkSetupPrompt } from "./src/storage/arkSetupStorage";
 import { isUpdateSafe } from "./src/utils/versionGuard";
 import { getPrivacyMode } from "./src/storage/privacyStorage";
 import { resolveUpdateInfo, summarizeHighlight } from "./src/utils/updateReleaseNotes";
+import { createUpdateChecker, type UpdateCheckOutcome } from "./src/utils/updateCheck";
+import { UpdateCheckProvider } from "./src/components/UpdateCheckContext";
 
 const FlagSecureModule = Platform.OS === "android" ? NativeModules.FlagSecureModule : null;
 const ScreenGuardModule = Platform.OS === "ios" ? NativeModules.ScreenGuardModule : null;
@@ -234,11 +236,6 @@ const AppContent: React.FC = () => {
     setIsOnboardingComplete(true);
   }, [skipAllCoachmarks, startGuidedTour]);
 
-  const extractUpdatePrompt = useCallback(
-    (manifest: unknown): UpdatePrompt => resolveUpdateInfo(manifest, CURRENT_APP_VERSION),
-    []
-  );
-
   const formatDateTime = useCallback((iso?: string) => {
     if (!iso) return "Unknown";
     const parsed = Date.parse(iso);
@@ -246,46 +243,62 @@ const AppContent: React.FC = () => {
     return new Date(parsed).toLocaleString();
   }, []);
 
+  // The ONE update checker for the whole app (see utils/updateCheck.ts). The
+  // automatic check below and the Settings "Check for Updates" row both go
+  // through it, and only this component presents the "Update Ready" dialog -
+  // two checkers with a dialog each is how the dialogs came to stack.
+  const updateChecker = useMemo(
+    () =>
+      createUpdateChecker({
+        getPreferences: getUpdatePreferences,
+        setLastCheckedAt: setLastUpdateCheckAt,
+        checkForUpdate: async () =>
+          (await Updates.checkForUpdateAsync()) as { isAvailable: boolean; manifest?: unknown },
+        fetchUpdate: async () => (await Updates.fetchUpdateAsync()) as { manifest?: unknown },
+        resolveUpdate: (manifest) => resolveUpdateInfo(manifest, CURRENT_APP_VERSION),
+        isSafe: (incomingRuntime) => isUpdateSafe(Updates.runtimeVersion ?? undefined, incomingRuntime),
+        now: Date.now,
+      }),
+    []
+  );
+
+  const checkForUpdates = useCallback(
+    async (source: "auto" | "manual"): Promise<UpdateCheckOutcome> => {
+      if (!canCheckUpdates) return { status: "unavailable" };
+      setIsCheckingUpdates(true);
+      try {
+        const outcome = await updateChecker.check(source);
+        if (outcome.status === "ready") setPendingUpdate(outcome.update);
+        return outcome;
+      } finally {
+        setIsCheckingUpdates(updateChecker.isChecking());
+      }
+    },
+    [canCheckUpdates, updateChecker]
+  );
+
   const runAutoUpdateCheck = useCallback(async () => {
-    if (isCheckingUpdates || !canCheckUpdates || isOnboardingComplete !== true) return;
-    setIsCheckingUpdates(true);
-
-    try {
-      const prefs = await getUpdatePreferences();
-      if (prefs.manualUpdateMode) return;
-
-      const lastChecked = prefs.lastCheckedAt ? Date.parse(prefs.lastCheckedAt) : 0;
-      const thirtyMinutes = 30 * 60 * 1000;
-      if (Date.now() - lastChecked < thirtyMinutes) return;
-
-      const checkedAt = new Date().toISOString();
-      const checkResult = await Updates.checkForUpdateAsync();
-      await setLastUpdateCheckAt(checkedAt);
-
-      if (!checkResult.isAvailable) return;
-
-      const fetchResult = await Updates.fetchUpdateAsync();
-      const fetchObj = fetchResult as Record<string, unknown>;
-      const checkObj = checkResult as Record<string, unknown>;
-      const manifest = fetchObj.manifest || checkObj.manifest || null;
-      const prompt = extractUpdatePrompt(manifest);
-
-      const currentRuntime = Updates.runtimeVersion ?? undefined;
-      if (!isUpdateSafe(currentRuntime, prompt.runtimeVersion)) {
-        if (__DEV__) console.warn("Blocked OTA downgrade:", prompt.runtimeVersion, "<", currentRuntime);
-        return;
+    if (isOnboardingComplete !== true) return;
+    const outcome = await checkForUpdates("auto");
+    if (__DEV__) {
+      if (outcome.status === "rejected") console.warn("Blocked OTA downgrade");
+      if (
+        outcome.status === "error" &&
+        !outcome.message.includes("not supported in development builds") &&
+        !outcome.message.includes("call to function")
+      ) {
+        console.error("Auto update check failed:", outcome.message);
       }
-
-      setPendingUpdate(prompt);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("not supported in development builds") && !message.includes("call to function")) {
-        if (__DEV__) console.error("Auto update check failed:", error);
-      }
-    } finally {
-      setIsCheckingUpdates(false);
     }
-  }, [canCheckUpdates, extractUpdatePrompt, isCheckingUpdates, isOnboardingComplete]);
+  }, [checkForUpdates, isOnboardingComplete]);
+
+  const updateCheck = useMemo(
+    () => ({
+      checkForUpdatesNow: () => checkForUpdates("manual"),
+      isCheckingUpdates,
+    }),
+    [checkForUpdates, isCheckingUpdates]
+  );
 
   useEffect(() => {
     if (isOnboardingComplete !== true || !canCheckUpdates) return;
@@ -574,6 +587,7 @@ const AppContent: React.FC = () => {
   return (
     <OnboardingGateProvider value={onboardingGate}>
     <FeatureTourProvider value={featureTour}>
+    <UpdateCheckProvider value={updateCheck}>
     {/* Everything financial mounts behind the optional PIN gate. While
         locked the tree below is NOT rendered (see AppLockGate header). */}
     <AppLockGate>
@@ -751,6 +765,7 @@ const AppContent: React.FC = () => {
       />
     </View>
     </AppLockGate>
+    </UpdateCheckProvider>
     </FeatureTourProvider>
     </OnboardingGateProvider>
   );
